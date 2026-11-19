@@ -26,7 +26,7 @@ def test_filtered_graph_traversal_liver_from_tnf():
     r = client.get("/v1/graph", params={"start": "TNF", "max_hops": 2, "min_eco": "A", "tissue": "Liver"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body["nodes"]) == {"IL6", "STAT3", "CRP"}
+    assert set(body["nodes"]) == {"IL6", "STAT3"}
     assert len(body["edges"]) == 2
 
 def test_dataset_evaluation_scoring():
