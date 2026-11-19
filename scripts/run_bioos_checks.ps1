@@ -6,13 +6,20 @@
 
 $ErrorActionPreference = "Stop"
 
-$PythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $SrcDir = Join-Path $ProjectRoot "src"
 
-if (-not (Test-Path $PythonExe)) {
-    throw "Virtual environment Python not found at: $PythonExe"
+if (Test-Path -LiteralPath $VenvPython) {
+    $PythonExe = $VenvPython
+} else {
+    $PythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $PythonCmd) {
+        throw "Virtual environment Python not found at '$VenvPython' and 'python' was not found on PATH."
+    }
+    $PythonExe = $PythonCmd.Source
 }
-if (-not (Test-Path $SrcDir)) {
+
+if (-not (Test-Path -LiteralPath $SrcDir)) {
     throw "Source directory not found at: $SrcDir"
 }
 
@@ -85,3 +92,4 @@ finally {
     }
     Pop-Location
 }
+
