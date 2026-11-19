@@ -64,16 +64,8 @@ try {
         New-Item -ItemType Directory -Path $outParent -Force | Out-Null
     }
 
-    $snapOutputJson = & $PythonExe -m bioos.cli --base-url $BaseUrl snapshot `
-        --title "BIOOS Automated Check Snapshot" `
-        --signals "TNF up, IL6 up, IFNG up, CXCL10 up" `
-        --start-node "TNF" `
-        --max-hops 2 `
-        --actor "BIOOS-Check-Runner" `
-        --tissue "Blood" `
-        --eco-levels A
-        --out $resolvedOut
-        --verify
+    $snapArgs = @("-m", "bioos.cli", "--base-url", $BaseUrl, "snapshot", "--title", "BIOOS Automated Check Snapshot", "--signals", "TNF up, IL6 up, IFNG up, CXCL10 up", "--start-node", "TNF", "--max-hops", "2", "--actor", "BIOOS-Check-Runner", "--tissue", "Blood", "--eco-levels", "A", "--out", $resolvedOut)
+    $snapOutputJson = & $PythonExe @snapArgs
 
     $snapWrapper = $snapOutputJson | ConvertFrom-Json
     $verifySavedJson = & $PythonExe -m bioos.cli --base-url $BaseUrl verify-snapshot --file $resolvedOut
