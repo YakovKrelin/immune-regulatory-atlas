@@ -5,3 +5,4 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+scripts/latest_bioos_snapshot.json
