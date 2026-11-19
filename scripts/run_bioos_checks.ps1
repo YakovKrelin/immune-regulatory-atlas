@@ -1,6 +1,6 @@
-﻿param(
+param(
     [string]$BaseUrl = "http://127.0.0.1:8000",
-    [string]$ProjectRoot = "C:\Users\Yakov Krelin\Documents\Immune Regulatory Atlas",
+    [string]$ProjectRoot = (Get-Location).Path,
     [string]$OutSnapshot = "scripts\latest_bioos_snapshot.json"
 )
 
@@ -71,7 +71,7 @@ try {
         --max-hops 2 `
         --actor "BIOOS-Check-Runner" `
         --tissue "Blood" `
-        --eco-levels A `
+        --eco-levels A
         --out $resolvedOut `
         --verify
 
