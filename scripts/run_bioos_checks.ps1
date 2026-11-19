@@ -72,7 +72,7 @@ try {
         --actor "BIOOS-Check-Runner" `
         --tissue "Blood" `
         --eco-levels A
-        --out $resolvedOut `
+        --out $resolvedOut
         --verify
 
     $snapWrapper = $snapOutputJson | ConvertFrom-Json
