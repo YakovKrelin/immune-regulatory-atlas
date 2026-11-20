@@ -779,3 +779,7 @@ def generate_v0_1_hypotheses(req: HypothesisRequest) -> dict[str, Any]:
     return _build_v0_1_hypotheses(req)
 
 SnapshotCreateRequest.model_rebuild()
+
+from bioos.v0_2_router import router as v0_2_router
+
+app.include_router(v0_2_router)
