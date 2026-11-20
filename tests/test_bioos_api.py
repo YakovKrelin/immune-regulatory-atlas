@@ -115,3 +115,41 @@ def test_v0_1_hypotheses_generation() -> None:
     assert "BIOOS:A0004903" in hypoxia_hyp["conflict_assertion_ids"]
     assert body["modality_warnings"]
     assert body["disclaimer"]
+
+
+def test_snapshot_with_hypotheses_sha256_integrity() -> None:
+    create_resp = client.post(
+        "/v1/snapshots",
+        json={
+            "title": "v0_1_hypotheses_snapshot",
+            "signals": ["TNF UP", "IFNG UP", "HIF1A UP", "VEGFA UP"],
+            "tissue": "Lung",
+            "cell_type": "Macrophage",
+            "verify": True,
+            "include_hypotheses": True,
+            "hypotheses_request": {
+                "name": "snap_hyp_run",
+                "modality": "RNA-seq",
+                "tissue": "Lung",
+                "cell_type": "Macrophage",
+                "signals": ["TNF UP", "IFNG UP", "HIF1A UP", "VEGFA UP"],
+            },
+        },
+    )
+    assert create_resp.status_code in (200, 201)
+    created = create_resp.json()
+    assert created["verification"]["valid"] is True
+
+    snap = created["snapshot"]
+    assert snap["payload"].get("hypotheses") is not None
+    assert snap["payload"]["hypotheses"]["hypotheses"]
+
+    verify_resp = client.post("/v1/snapshots/verify", json={"snapshot": snap})
+    assert verify_resp.status_code == 200
+    assert verify_resp.json()["valid"] is True
+
+    tampered = copy.deepcopy(snap)
+    tampered["payload"]["hypotheses"]["hypotheses"][0]["statement"] = "TAMPERED_STATEMENT"
+    tampered_resp = client.post("/v1/snapshots/verify", json={"snapshot": tampered})
+    assert tampered_resp.status_code == 200
+    assert tampered_resp.json()["valid"] is False

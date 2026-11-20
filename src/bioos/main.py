@@ -50,7 +50,8 @@ class SnapshotCreateRequest(BaseModel):
     eco_levels: list[str] | None = None
     min_eco: str | None = None
     verify: bool = True
-
+    include_hypotheses: bool = False
+    hypotheses_request: HypothesisRequest | None = None
 
 class SnapshotVerifyRequest(BaseModel):
     snapshot: dict[str, Any] | None = None
@@ -530,7 +531,20 @@ def _build_snapshot(req: SnapshotCreateRequest) -> dict[str, Any]:
         signals=signals_list,
     )
 
+    hypotheses_payload: dict[str, Any] | None = None
+    if getattr(req, "include_hypotheses", False) or getattr(req, "hypotheses_request", None) is not None:
+        raw_signals = getattr(req, "signals", []) or []
+        parsed_signals = [s.strip() for s in raw_signals.split(",")] if isinstance(raw_signals, str) else list(raw_signals)
+        h_req = getattr(req, "hypotheses_request", None) or HypothesisRequest(
+            name=getattr(req, "title", "snapshot_hypotheses"),
+            tissue=getattr(req, "tissue", None),
+            cell_type=getattr(req, "cell_type", None),
+            signals=parsed_signals,
+        )
+        hypotheses_payload = _build_v0_1_hypotheses(h_req)
+
     canonical_payload = {
+        "hypotheses": hypotheses_payload,
         "title": req.title,
         "signals": signals_list,
         "start_node": req.start_node,
