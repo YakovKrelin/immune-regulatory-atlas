@@ -47,3 +47,71 @@ def test_snapshot_creation_and_sha256_verification(tmp_path: Path):
     tampered = copy.deepcopy(created["snapshot"])
     tampered["payload"]["title"] = "Tampered"
     assert client.post("/v1/snapshots/verify", json={"snapshot": tampered}).json()["valid"] is False
+
+
+def test_dataset_evaluation_hypoxia_and_warnings() -> None:
+    resp = client.post(
+        "/v1/datasets/evaluate",
+        json={
+            "name": "hypoxia_check",
+            "modality": "RNA-seq",
+            "tissue": "Lung",
+            "cell_type": "Macrophage",
+            "signals": ["HIF1A UP", "VEGFA UP", "IL10 UP"],
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    names = [s["name"] for s in body["active_states"]]
+    assert "Hypoxia" in names
+    assert body["modality_warnings"]
+    assert "not a clinical diagnosis" in body["disclaimer"].lower()
+
+
+def test_hypoxia_graph_and_conflict_filtering() -> None:
+    from bioos.engine.filters import filter_assertions
+    from bioos.main import V0_1_ASSERTIONS
+
+    lung_hypoxia = filter_assertions(V0_1_ASSERTIONS, tissue="Lung")
+    assert any(item["id"] == "BIOOS:A0004901" and item["target"] == "VEGFA" for item in lung_hypoxia)
+
+    conflicts = filter_assertions(V0_1_ASSERTIONS, conflict_only=True)
+    assert [item["id"] for item in conflicts] == ["BIOOS:A0004903"]
+
+
+def test_v0_1_modules_endpoints() -> None:
+    resp = client.get("/v1/modules")
+    assert resp.status_code == 200
+    modules = resp.json()
+    axes = {m["axis"] for m in modules}
+    assert {"Inflammation", "Interferon", "Hypoxia"}.issubset(axes)
+
+    hypoxia_resp = client.get("/v1/modules/MOD:V0_1:HYPOXIA")
+    assert hypoxia_resp.status_code == 200
+    hypoxia_mod = hypoxia_resp.json()
+    assert "HIF1A" in hypoxia_mod["nodes"]
+    assert "BIOOS:A0004903" in hypoxia_mod["conflict_assertion_ids"]
+
+    missing_resp = client.get("/v1/modules/MOD:UNKNOWN")
+    assert missing_resp.status_code == 404
+
+
+def test_v0_1_hypotheses_generation() -> None:
+    resp = client.post(
+        "/v1/hypotheses/generate",
+        json={
+            "name": "tri_axis_check",
+            "modality": "RNA-seq",
+            "tissue": "Lung",
+            "cell_type": "Macrophage",
+            "signals": ["TNF UP", "IFNG UP", "HIF1A UP", "VEGFA UP"],
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    axes = {h["axis"] for h in body["hypotheses"]}
+    assert {"Inflammation", "Interferon", "Hypoxia"}.issubset(axes)
+    hypoxia_hyp = next(h for h in body["hypotheses"] if h["axis"] == "Hypoxia")
+    assert "BIOOS:A0004903" in hypoxia_hyp["conflict_assertion_ids"]
+    assert body["modality_warnings"]
+    assert body["disclaimer"]

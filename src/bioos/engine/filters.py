@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -34,7 +34,7 @@ def _extract_eco_code(assertion: dict[str, Any]) -> str | None:
             return val
     evidence = assertion.get("evidence")
     if isinstance(evidence, dict):
-        for key in ("eco", "level", "code"):
+        for key in ("eco", "level", "code", "eco_code"):
             val = _norm_eco(evidence.get(key))
             if val:
                 return val
@@ -47,13 +47,24 @@ def _extract_context_field(assertion: dict[str, Any], field_name: str) -> str | 
         val = _norm_str(context.get(field_name))
         if val is not None:
             return val
+    evidence = assertion.get("evidence")
+    if isinstance(evidence, dict):
+        val = _norm_str(evidence.get(field_name))
+        if val is not None:
+            return val
     return _norm_str(assertion.get(field_name))
 
 
 def _extract_conflict_flag(assertion: dict[str, Any]) -> bool:
     for key in ("conflict", "has_conflict", "conflicting"):
-        if key in assertion:
+        if key in assertion and assertion.get(key) is not None:
             return bool(assertion.get(key))
+    status = _norm_str(assertion.get("conflict_status"))
+    if status in {"direct_contradiction", "context_dependent", "conflict", "conflicting"}:
+        return True
+    contradicts = assertion.get("contradicts")
+    if isinstance(contradicts, list) and len(contradicts) > 0:
+        return True
     return False
 
 
@@ -67,9 +78,13 @@ def filter_assertions(
     pathology: str | None = None,
     physiology: str | None = None,
     stimulus: str | None = None,
+    modality: str | None = None,
+    phase: str | None = None,
+    timepoint: str | None = None,
+    translational_status: str | None = None,
     conflict_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Filter regulatory assertions by ECO tier, biological context, and conflict flag."""
+    """Filter regulatory assertions by ECO tier, context dimensions, modality, and conflict state."""
     allowed_eco_codes: set[str] = set()
     for raw_eco in eco_levels or []:
         for part in str(raw_eco).split(","):
@@ -86,6 +101,10 @@ def filter_assertions(
     f_pathology = _norm_str(pathology)
     f_physiology = _norm_str(physiology)
     f_stimulus = _norm_str(stimulus)
+    f_modality = _norm_str(modality)
+    f_phase = _norm_str(phase)
+    f_timepoint = _norm_str(timepoint)
+    f_translational_status = _norm_str(translational_status)
 
     matched: list[dict[str, Any]] = []
     for item in assertions:
@@ -115,6 +134,16 @@ def filter_assertions(
         if f_physiology is not None and _extract_context_field(item, "physiology") != f_physiology:
             continue
         if f_stimulus is not None and _extract_context_field(item, "stimulus") != f_stimulus:
+            continue
+        if f_modality is not None:
+            actual_mod = _extract_context_field(item, "modality") or _extract_context_field(item, "measurement_level")
+            if actual_mod != f_modality:
+                continue
+        if f_phase is not None and _extract_context_field(item, "phase") != f_phase:
+            continue
+        if f_timepoint is not None and _extract_context_field(item, "timepoint") != f_timepoint:
+            continue
+        if f_translational_status is not None and _extract_context_field(item, "translational_status") != f_translational_status:
             continue
 
         matched.append(item)

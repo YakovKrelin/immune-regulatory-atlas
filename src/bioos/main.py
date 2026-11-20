@@ -226,6 +226,85 @@ def _load_initial_assertions() -> list[dict[str, Any]]:
 
 
 ASSERTIONS: list[dict[str, Any]] = _load_initial_assertions()
+
+V0_1_ASSERTIONS: list[dict[str, Any]] = [
+        {
+            "id": "BIOOS:A0004901",
+            "source": "HIF1A",
+            "target": "VEGFA",
+            "relation": "activates",
+            "eco": "B",
+            "conflict": False,
+            "conflict_status": "none",
+            "context": {
+                "organism": "Homo sapiens",
+                "tissue": "Lung",
+                "cell_type": "Macrophage",
+                "pathology": "Hypoxia",
+                "physiology": "Hypoxic adaptation",
+                "stimulus": "Hypoxia",
+                "modality": "mRNA",
+                "phase": "innate_response",
+                "timepoint": "6h",
+                "translational_status": "primary_human_cells",
+            },
+            "provenance": {
+                "prov_type": "prov:Entity",
+                "derived_from": "bioos_v0_1_hypoxia_seed",
+            },
+        },
+        {
+            "id": "BIOOS:A0004902",
+            "source": "STAT1",
+            "target": "CXCL10",
+            "relation": "transactivates",
+            "eco": "A",
+            "conflict": False,
+            "conflict_status": "none",
+            "context": {
+                "organism": "Homo sapiens",
+                "tissue": "Blood",
+                "cell_type": "Monocyte",
+                "pathology": "Viral infection",
+                "physiology": "Interferon signaling",
+                "stimulus": "IFNG",
+                "modality": "mRNA",
+                "phase": "amplification_isg",
+                "timepoint": "12h",
+                "translational_status": "primary_human_cells",
+            },
+            "provenance": {
+                "prov_type": "prov:Entity",
+                "derived_from": "bioos_v0_1_interferon_seed",
+            },
+        },
+        {
+            "id": "BIOOS:A0004903",
+            "source": "HIF1A",
+            "target": "IFNG",
+            "relation": "contradicts",
+            "eco": "F",
+            "conflict": True,
+            "conflict_status": "context_dependent",
+            "contradicts": ["BIOOS:A0004874"],
+            "context": {
+                "organism": "Homo sapiens",
+                "tissue": "Lung",
+                "cell_type": "Macrophage",
+                "pathology": "Hypoxia",
+                "physiology": "Context switch under hypoxia",
+                "stimulus": "Hypoxia",
+                "modality": "secreted",
+                "phase": "innate_response",
+                "timepoint": "24h",
+                "translational_status": "cell_line",
+            },
+            "provenance": {
+                "prov_type": "prov:Entity",
+                "derived_from": "bioos_v0_1_conflict_seed",
+            },
+        },
+]
 SNAPSHOT_STORE: dict[str, dict[str, Any]] = {}
 
 
@@ -341,26 +420,70 @@ def _evaluate_dataset_payload(
     upper_tokens = {token.strip().upper() for token in signals if token.strip()}
     active_states: list[dict[str, Any]] = []
 
-    inflammation_markers = {"TNF UP", "IL6 UP", "TNF", "IL6"}
-    if upper_tokens & inflammation_markers:
-        matched = sorted(upper_tokens & inflammation_markers)
-        active_states.append(
-            {
-                "name": "Acute Inflammation",
-                "score": round(len(matched) / len(inflammation_markers), 3),
-                "matched_signals": matched,
-            }
-        )
+    state_rules = [
+        {
+            "name": "Acute Inflammation",
+            "anchors": {"TNF UP", "IL6 UP", "TNF", "IL6"},
+            "supporting": {"IL1B UP", "IL1B", "CXCL8 UP", "CXCL8", "CRP UP", "CRP"},
+            "missing_hints": [
+                "secreted protein vs mRNA level",
+                "timepoint / acute vs chronic duration",
+            ],
+        },
+        {
+            "name": "Interferon State",
+            "anchors": {"IFNG UP", "CXCL10 UP", "IFNG", "CXCL10"},
+            "supporting": {
+                "IFNB1 UP",
+                "IFNB1",
+                "ISG15 UP",
+                "ISG15",
+                "MX1 UP",
+                "MX1",
+                "OAS1 UP",
+                "OAS1",
+                "STAT1 UP",
+                "STAT1",
+            },
+            "missing_hints": [
+                "downstream ISG confirmation",
+                "producer vs responder cell type",
+            ],
+        },
+        {
+            "name": "Hypoxia",
+            "anchors": {"HIF1A UP", "HIF1A", "VEGFA UP", "VEGFA", "LDHA UP", "LDHA"},
+            "supporting": {"SLC2A1 UP", "SLC2A1", "EPO UP", "EPO", "BNIP3 UP", "BNIP3"},
+            "missing_hints": [
+                "protein stabilization vs transcript level",
+                "tissue oxygenation / compartment context",
+            ],
+        },
+    ]
 
-    interferon_markers = {"IFNG UP", "CXCL10 UP", "IFNG", "CXCL10"}
-    if upper_tokens & interferon_markers:
-        matched = sorted(upper_tokens & interferon_markers)
-        active_states.append(
-            {
-                "name": "Interferon State",
-                "score": round(len(matched) / len(interferon_markers), 3),
-                "matched_signals": matched,
-            }
+    for rule in state_rules:
+        anchor_hits = sorted(upper_tokens & rule["anchors"])
+        supporting_hits = sorted(upper_tokens & rule["supporting"])
+        matched = sorted(set(anchor_hits) | set(supporting_hits))
+        if matched:
+            denom = max(1, len(rule["anchors"]))
+            score = round(min(1.0, len(anchor_hits) / denom), 3)
+            active_states.append(
+                {
+                    "name": rule["name"],
+                    "score": score,
+                    "matched_signals": matched,
+                    "anchor_hits": anchor_hits,
+                    "supporting_hits": supporting_hits,
+                    "missing_context_checks": rule["missing_hints"],
+                    "not_a_diagnosis": True,
+                }
+            )
+
+    modality_warnings: list[str] = []
+    if modality.strip().lower() in {"rna-seq", "rnaseq", "transcriptomics"}:
+        modality_warnings.append(
+            "Transcript-level measurement (RNA-seq) does not directly confirm protein abundance, post-translational activation, or cytokine secretion."
         )
 
     return {
@@ -370,9 +493,10 @@ def _evaluate_dataset_payload(
         "cell_type": cell_type,
         "signals": signals,
         "active_states": active_states,
+        "modality_warnings": modality_warnings,
+        "disclaimer": "Not a clinical diagnosis; hypothesis-supportive regulatory assessment only.",
         "knowledge_base_sha256": _knowledge_base_sha256(),
     }
-
 
 def _build_snapshot(req: SnapshotCreateRequest) -> dict[str, Any]:
     signals_list = _parse_signals(req.signals)
@@ -579,3 +703,218 @@ def verify_snapshot(req: SnapshotVerifyRequest) -> dict[str, Any]:
         snap_obj = loaded.get("snapshot", loaded) if isinstance(loaded, dict) else {}
         return _verify_snapshot_record(snap_obj)
     raise HTTPException(status_code=400, detail="Provide either 'snapshot' or 'file_path'")
+
+
+_V0_1_MODULE_SPECS: list[dict[str, Any]] = [
+    {
+        "module_id": "MOD:V0_1:INFLAMMATION",
+        "name": "Acute Inflammation Axis",
+        "axis": "Inflammation",
+        "anchor_nodes": ["TNF", "IL6", "STAT3", "CRP"],
+        "description": "Core pro-inflammatory cytokine signaling and acute-phase cascade across Blood and Liver.",
+    },
+    {
+        "module_id": "MOD:V0_1:INTERFERON",
+        "name": "Interferon Signaling Axis",
+        "axis": "Interferon",
+        "anchor_nodes": ["IFNG", "STAT1", "CXCL10"],
+        "description": "Type II / interferon-driven transcriptional activation and chemokine induction.",
+    },
+    {
+        "module_id": "MOD:V0_1:HYPOXIA",
+        "name": "Hypoxia & Crosstalk Axis",
+        "axis": "Hypoxia",
+        "anchor_nodes": ["HIF1A", "VEGFA", "IFNG"],
+        "description": "Hypoxic adaptation module and context-dependent crosstalk/conflict edges under hypoxia.",
+    },
+]
+
+
+def _build_v0_1_modules() -> list[dict[str, Any]]:
+    pool = [*ASSERTIONS, *V0_1_ASSERTIONS]
+    kb_hash = _knowledge_base_sha256()
+    modules: list[dict[str, Any]] = []
+
+    for spec in _V0_1_MODULE_SPECS:
+        anchors = {node.upper() for node in spec["anchor_nodes"]}
+        matched_assertions: list[dict[str, Any]] = []
+        nodes_set: set[str] = set(spec["anchor_nodes"])
+        modalities_set: set[str] = set()
+        conflict_ids: list[str] = []
+
+        for item in pool:
+            src = str(item.get("source", "")).strip()
+            tgt = str(item.get("target", "")).strip()
+            ctx = item.get("context") if isinstance(item.get("context"), dict) else {}
+            stimulus = str(ctx.get("stimulus", "")).strip().upper()
+            pathology = str(ctx.get("pathology", "")).strip().upper()
+            axis_upper = spec["axis"].upper()
+
+            is_match = (
+                src.upper() in anchors
+                or tgt.upper() in anchors
+                or stimulus == axis_upper
+                or pathology == axis_upper
+            )
+            if not is_match:
+                continue
+
+            matched_assertions.append(item)
+            if src:
+                nodes_set.add(src)
+            if tgt:
+                nodes_set.add(tgt)
+
+            mod_val = ctx.get("modality") or ctx.get("measurement_level")
+            if mod_val:
+                modalities_set.add(str(mod_val))
+
+            has_conflict = bool(item.get("conflict")) or str(item.get("relation", "")).lower() == "contradicts"
+            if has_conflict and item.get("id"):
+                conflict_ids.append(str(item["id"]))
+
+        modules.append(
+            {
+                "module_id": spec["module_id"],
+                "version": "0.1",
+                "name": spec["name"],
+                "axis": spec["axis"],
+                "description": spec["description"],
+                "anchor_nodes": spec["anchor_nodes"],
+                "nodes": sorted(nodes_set),
+                "assertions_count": len(matched_assertions),
+                "assertion_ids": [a.get("id") for a in matched_assertions if a.get("id")],
+                "conflict_assertion_ids": conflict_ids,
+                "modalities": sorted(modalities_set),
+                "knowledge_base_sha256": kb_hash,
+            }
+        )
+
+    return modules
+
+
+@app.get("/v1/modules")
+def list_v0_1_modules(axis: str | None = None) -> list[dict[str, Any]]:
+    modules = _build_v0_1_modules()
+    if axis:
+        norm_axis = axis.strip().lower()
+        modules = [m for m in modules if str(m["axis"]).lower() == norm_axis]
+    return modules
+
+
+@app.get("/v1/modules/{module_id}")
+def get_v0_1_module(module_id: str) -> dict[str, Any]:
+    target_id = module_id.strip()
+    for mod in _build_v0_1_modules():
+        if mod["module_id"] == target_id:
+            return mod
+    raise HTTPException(status_code=404, detail=f"Module '{module_id}' not found")
+
+
+class HypothesisRequest(BaseModel):
+    name: str = "v0.1_hypothesis_run"
+    modality: str = "RNA-seq"
+    tissue: str | None = None
+    cell_type: str | None = None
+    signals: list[str] = Field(default_factory=list)
+    axes: list[str] | None = None
+
+
+def _build_v0_1_hypotheses(req: HypothesisRequest) -> dict[str, Any]:
+    evaluation = _evaluate_dataset_payload(
+        name=req.name,
+        modality=req.modality,
+        tissue=req.tissue,
+        cell_type=req.cell_type,
+        signals=req.signals,
+    )
+    all_modules = _build_v0_1_modules()
+    requested_axes = {a.strip().lower() for a in (req.axes or []) if a.strip()}
+    if requested_axes:
+        modules = [m for m in all_modules if str(m["axis"]).lower() in requested_axes]
+    else:
+        modules = all_modules
+
+    state_to_axis = {
+        "Acute Inflammation": "Inflammation",
+        "Interferon State": "Interferon",
+        "Hypoxia": "Hypoxia",
+    }
+    active_state_map = {s["name"]: s for s in evaluation["active_states"]}
+    active_axes = {state_to_axis[name] for name in active_state_map if name in state_to_axis}
+
+    hypotheses: list[dict[str, Any]] = []
+    for mod in modules:
+        axis_name = str(mod["axis"])
+        matching_state = next(
+            (s for s, ax in state_to_axis.items() if ax == axis_name and s in active_state_map),
+            None,
+        )
+        matched_signals = active_state_map[matching_state]["matched_signals"] if matching_state else []
+        state_score = active_state_map[matching_state]["score"] if matching_state else 0.0
+
+        supporting_assertions = [
+            item
+            for item in [*ASSERTIONS, *V0_1_ASSERTIONS]
+            if item.get("id") in mod["assertion_ids"] and not item.get("conflict")
+        ]
+        conflict_assertions = [
+            item
+            for item in [*ASSERTIONS, *V0_1_ASSERTIONS]
+            if item.get("id") in mod["conflict_assertion_ids"]
+        ]
+
+        if matching_state or mod["conflict_assertion_ids"]:
+            hypotheses.append(
+                {
+                    "hypothesis_id": f"HYP:V0_1:{axis_name.upper()}",
+                    "version": "0.1",
+                    "axis": axis_name,
+                    "module_id": mod["module_id"],
+                    "active_state": matching_state,
+                    "state_score": state_score,
+                    "matched_signals": matched_signals,
+                    "supporting_assertion_ids": [a.get("id") for a in supporting_assertions if a.get("id")],
+                    "conflict_assertion_ids": mod["conflict_assertion_ids"],
+                    "context_checks_required": (
+                        active_state_map[matching_state]["missing_context_checks"]
+                        if matching_state
+                        else ["context & stimulus confirmation"]
+                    ),
+                    "statement": (
+                        f"{axis_name} axis ({mod['module_id']}) shows active state '{matching_state}' "
+                        f"with {len(supporting_assertions)} supporting assertions and "
+                        f"{len(conflict_assertions)} context-dependent/conflicting edge(s)."
+                    ),
+                    "not_a_diagnosis": True,
+                }
+            )
+
+    crosstalk_notes: list[str] = []
+    if {"Inflammation", "Hypoxia"}.issubset(active_axes) or "Hypoxia" in active_axes:
+        crosstalk_notes.append(
+            "Evaluate HIF1A-driven hypoxia adaptation alongside inflammatory/interferon signaling and context-dependent conflict edges."
+        )
+    if {"Inflammation", "Interferon"}.issubset(active_axes):
+        crosstalk_notes.append(
+            "Concurrent Inflammation and Interferon signals detected; verify cell-type specificity and temporal phase before inferring synergy or antagonism."
+        )
+
+    return {
+        "run_name": req.name,
+        "version": "0.1",
+        "modality": req.modality,
+        "tissue": req.tissue,
+        "cell_type": req.cell_type,
+        "active_states": evaluation["active_states"],
+        "hypotheses": hypotheses,
+        "crosstalk_notes": crosstalk_notes,
+        "modality_warnings": evaluation["modality_warnings"],
+        "disclaimer": evaluation["disclaimer"],
+        "knowledge_base_sha256": evaluation["knowledge_base_sha256"],
+    }
+
+
+@app.post("/v1/hypotheses/generate")
+def generate_v0_1_hypotheses(req: HypothesisRequest) -> dict[str, Any]:
+    return _build_v0_1_hypotheses(req)
