@@ -1,6 +1,7 @@
-import argparse
+﻿import argparse
 import hashlib
 import json
+import re
 import sys
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -12,37 +13,50 @@ def _sha256_canonical(obj: Any) -> str:
     canonical_bytes = json.dumps(
         obj,
         sort_keys=True,
-        ensure_ascii=True,
+        ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(canonical_bytes).hexdigest()
 
 
 def verify_snapshot_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
-    recorded_payload_hash = snapshot.get("canonical_payload_sha256", "")
-    recorded_kb_hash = snapshot.get("knowledge_base_sha256", "")
-    prov = snapshot.get("prov_o", {})
-    used_entities = prov.get("used_entities", [])
+    snap_obj = snapshot.get("snapshot", snapshot) if isinstance(snapshot, dict) else {}
+    if not isinstance(snap_obj, dict):
+        snap_obj = {}
 
-    kb_entity_hash = ""
-    for ent in used_entities:
-        if ent.get("entity_id") == "bioos:kb:assertions_states_modules":
-            kb_entity_hash = ent.get("sha256", "")
-            break
+    recorded_payload_hash = snap_obj.get("canonical_payload_sha256", "") or ""
+    recorded_kb_hash = snap_obj.get("knowledge_base_sha256", "") or ""
+    payload = snap_obj.get("payload")
 
-    kb_hash_consistent = bool(recorded_kb_hash) and (recorded_kb_hash == kb_entity_hash)
-    generated_entity_hash = prov.get("generated_entity", {}).get("sha256", "")
-    payload_hash_present = len(recorded_payload_hash) == 64
-    payload_matches_prov = bool(recorded_payload_hash) and (recorded_payload_hash == generated_entity_hash)
+    hex64 = bool(re.fullmatch(r"[0-9a-fA-F]{64}", recorded_payload_hash))
+    kb_hex64 = bool(re.fullmatch(r"[0-9a-fA-F]{64}", recorded_kb_hash))
+
+    if isinstance(payload, dict):
+        recomputed_payload_hash = _sha256_canonical(payload)
+        payload_matches = bool(recorded_payload_hash) and (recomputed_payload_hash == recorded_payload_hash)
+    else:
+        recomputed_payload_hash = ""
+        payload_matches = hex64
+
+    prov = snap_obj.get("provenance")
+    prov_derived_ok = True
+    if isinstance(prov, dict):
+        derived_from = prov.get("prov:wasDerivedFrom")
+        if isinstance(derived_from, str) and derived_from.startswith("kb:sha256:"):
+            prov_kb = derived_from.split("kb:sha256:", 1)[1]
+            prov_derived_ok = bool(recorded_kb_hash) and (prov_kb == recorded_kb_hash)
+
+    is_valid = bool(hex64 and kb_hex64 and payload_matches and prov_derived_ok)
 
     return {
-        "snapshot_id": snapshot.get("snapshot_id"),
+        "snapshot_id": snap_obj.get("snapshot_id"),
         "canonical_payload_sha256": recorded_payload_hash,
+        "recomputed_payload_sha256": recomputed_payload_hash,
         "knowledge_base_sha256": recorded_kb_hash,
-        "kb_provenance_hash_match": kb_hash_consistent,
-        "payload_provenance_hash_match": payload_matches_prov,
-        "sha256_format_valid": payload_hash_present,
-        "valid": bool(kb_hash_consistent and payload_matches_prov and payload_hash_present),
+        "payload_sha256_valid": payload_matches,
+        "prov_derived_from_valid": prov_derived_ok,
+        "sha256_format_valid": hex64 and kb_hex64,
+        "valid": is_valid,
     }
 
 
@@ -115,21 +129,6 @@ def _extract_filter_query(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def _parse_signals_arg(signals_arg: str) -> list[dict[str, Any]]:
-    measurements: list[dict[str, Any]] = []
-    for raw_part in signals_arg.split(","):
-        part = raw_part.strip()
-        if not part:
-            continue
-        tokens = part.split()
-        symbol = tokens[0].upper()
-        direction = "up"
-        if len(tokens) > 1 and tokens[1].lower() in {"up", "down", "unchanged"}:
-            direction = tokens[1].lower()
-        measurements.append({"symbol": symbol, "direction": direction})
-    return measurements
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="BIOOS Human Regulatory Atlas CLI")
     parser.add_argument(
@@ -141,7 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_assert = sub.add_parser("assertions", help="Query filtered assertions")
     _add_filter_args(p_assert)
-
     p_graph = sub.add_parser("graph", help="Traverse regulatory neighborhood")
     p_graph.add_argument("--start", default="TNF", help="Start node (default: TNF)")
     p_graph.add_argument("--max-hops", type=int, default=2, help="Max traversal hops (1-5)")
@@ -157,7 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_hyp = sub.add_parser("hypotheses", help="Generate hypotheses from signal expressions")
     p_hyp.add_argument("--signals", default="TNF up, IL6 up, IFNG up, CXCL10 up")
 
-    p_ds = sub.add_parser("dataset", help="Evaluate expression measurements via POST /v1/datasets")
+    p_ds = sub.add_parser("dataset", help="Evaluate expression measurements via POST /v1/datasets/evaluate")
     p_ds.add_argument("--name", default="cli_expression_set", help="Dataset name")
     p_ds.add_argument(
         "--modality",
@@ -172,7 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="TNF up, IL6 up, IFNG up, CXCL10 up",
         help="Comma-separated features with direction (e.g. 'TNF up, IL6 up')",
     )
-    p_ds.add_argument("--json-file", default=None, help="Optional JSON file matching DatasetUploadRequest")
+    p_ds.add_argument("--json-file", default=None, help="Optional JSON file matching DatasetEvalRequest")
 
     p_snap = sub.add_parser("snapshot", help="Create reproducibility snapshot via POST /v1/snapshots")
     p_snap.add_argument("--title", default="BIOOS CLI Snapshot")
@@ -216,14 +214,13 @@ def main(argv: list[str] | None = None) -> None:
                 payload = json.load(fh)
         else:
             payload = {
-                "dataset_name": args.name,
+                "name": args.name,
                 "modality": args.modality,
-                "organism": args.organism,
                 "tissue": args.tissue,
                 "cell_type": args.cell_type,
-                "measurements": _parse_signals_arg(args.signals),
+                "signals": args.signals,
             }
-        result = _request_json(args.base_url, "/v1/datasets", method="POST", payload=payload)
+        result = _request_json(args.base_url, "/v1/datasets/evaluate", method="POST", payload=payload)
     elif args.command == "snapshot":
         active_filters = {k: v for k, v in _extract_filter_query(args).items() if v is not None}
         payload = {
