@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from bioos.engine.filters import filter_assertions
@@ -35,6 +35,15 @@ class DatasetEvalRequest(BaseModel):
     tissue: str | None = None
     cell_type: str | None = None
     signals: list[str] | str = Field(default_factory=list)
+
+
+class HypothesisRequest(BaseModel):
+    name: str = "v0.1_hypothesis_run"
+    modality: str = "RNA-seq"
+    tissue: str | None = None
+    cell_type: str | None = None
+    signals: list[str] = Field(default_factory=list)
+    axes: list[str] | None = None
 
 
 class SnapshotCreateRequest(BaseModel):
@@ -689,7 +698,7 @@ def evaluate_dataset(req: DatasetEvalRequest) -> dict[str, Any]:
 
 
 @app.post("/v1/snapshots")
-def create_snapshot(req: SnapshotCreateRequest) -> dict[str, Any]:
+def create_snapshot(req: SnapshotCreateRequest = Body(...)) -> dict[str, Any]:
     snap = _build_snapshot(req)
     verification = _verify_snapshot_record(snap) if req.verify else None
     return {
@@ -763,15 +772,10 @@ def get_v0_1_module(module_id: str) -> dict[str, Any]:
     raise HTTPException(status_code=404, detail=f"Module '{module_id}' not found")
 
 
-class HypothesisRequest(BaseModel):
-    name: str = "v0.1_hypothesis_run"
-    modality: str = "RNA-seq"
-    tissue: str | None = None
-    cell_type: str | None = None
-    signals: list[str] = Field(default_factory=list)
-    axes: list[str] | None = None
 
 
 @app.post("/v1/hypotheses/generate")
 def generate_v0_1_hypotheses(req: HypothesisRequest) -> dict[str, Any]:
     return _build_v0_1_hypotheses(req)
+
+SnapshotCreateRequest.model_rebuild()
