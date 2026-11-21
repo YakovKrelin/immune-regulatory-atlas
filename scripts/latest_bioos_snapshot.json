@@ -1,54 +1,153 @@
 {
-  "snapshot_id": "BIOOS:SNAP:1c7dcc9a-c5d",
-  "title": "BIOOS Automated Check Snapshot",
-  "created_at": "2026-11-19T20:28:26.404325+00:00",
-  "canonical_payload_sha256": "e4ebdd6d8d507f9d20a62fda9f2b54260d520ab8a7052d6ab8a700d5cf801ce4",
-  "knowledge_base_sha256": "f4df8ef0efd35b436495e235a03f8f5c87c8c775d963f4ffb83a82d11698e9a2",
-  "analytical_scope_note": "Analytical reproducibility snapshot with SHA-256 verification and PROV-O lineage; intended for research analysis, not clinical diagnosis.",
-  "summary": {
-    "graph_nodes_count": 4,
-    "graph_edges_count": 3,
-    "parsed_signals": [
-      "TNF",
-      "IL6",
-      "IFNG",
-      "CXCL10"
-    ],
-    "primary_hypothesis": "H1: Coordinated activation of pro-inflammatory and interferon responses.",
-    "conflicts_detected": 1
-  },
-  "prov_o": {
-    "context": {
-      "prov": "http://www.w3.org/ns/prov#",
-      "bioos": "https://bioos.org/ontology/",
-      "xsd": "http://www.w3.org/2001/XMLSchema#"
-    },
-    "activity_id": "bioos:activity:1c7dcc9a-c5d",
-    "generated_at": "2026-11-19T20:28:26.404325+00:00",
-    "was_associated_with": {
-      "agent_id": "bioos:agent:BIOOS-Check-Runner",
-      "agent_type": "prov:SoftwareAgent",
-      "label": "BIOOS-Check-Runner"
-    },
-    "used_entities": [
-      {
-        "entity_id": "bioos:kb:assertions_states_modules",
-        "entity_type": "prov:Entity",
-        "sha256": "f4df8ef0efd35b436495e235a03f8f5c87c8c775d963f4ffb83a82d11698e9a2",
-        "assertion_count": "5"
+  "snapshot": {
+    "snapshot_id": "snap_985e4a882bba",
+    "title": "BIOOS Automated Check Snapshot",
+    "created_at": "2026-11-21T14:25:07.512199+00:00",
+    "knowledge_base_sha256": "848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7",
+    "canonical_payload_sha256": "985e4a882bbadfd264d10165b70f4113feb973499dbd729d1e25e204e378244c",
+    "payload": {
+      "hypotheses": null,
+      "title": "BIOOS Automated Check Snapshot",
+      "signals": [
+        "TNF up",
+        "IL6 up",
+        "IFNG up",
+        "CXCL10 up"
+      ],
+      "start_node": "TNF",
+      "max_hops": 2,
+      "filters": {
+        "tissue": null,
+        "cell_type": null,
+        "pathology": null,
+        "physiology": null,
+        "stimulus": null,
+        "eco_levels": null,
+        "min_eco": null
       },
-      {
-        "entity_id": "bioos:input:signals_and_graph_params",
-        "entity_type": "prov:Entity",
-        "sha256": "47048c7e721689323d289a4f08d012e8b6ee6965fb1058c1b33fd0b1795def70"
-      }
-    ],
-    "generated_entity": {
-      "entity_id": "bioos:entity:1c7dcc9a-c5d",
-      "entity_type": "bioos:ReproducibilitySnapshot",
-      "sha256": "e4ebdd6d8d507f9d20a62fda9f2b54260d520ab8a7052d6ab8a700d5cf801ce4",
-      "was_generated_by": "bioos:activity:1c7dcc9a-c5d"
+      "assertion_ids": [
+        "BIOOS:A0004871",
+        "BIOOS:A0004874",
+        "BIOOS:A0004880",
+        "BIOOS:A0004881",
+        "BIOOS:A0004882"
+      ],
+      "subgraph": {
+        "start": "TNF",
+        "max_hops": 2,
+        "nodes": [
+          "IL6",
+          "STAT3"
+        ],
+        "all_visited_nodes": [
+          "TNF",
+          "IL6",
+          "STAT3"
+        ],
+        "edges": [
+          {
+            "assertion_id": "BIOOS:A0004871",
+            "source": "TNF",
+            "target": "IL6",
+            "relation": "activates",
+            "eco": "A"
+          },
+          {
+            "assertion_id": "BIOOS:A0004880",
+            "source": "TNF",
+            "target": "IL6",
+            "relation": "activates",
+            "eco": "A"
+          },
+          {
+            "assertion_id": "BIOOS:A0004881",
+            "source": "IL6",
+            "target": "STAT3",
+            "relation": "activates",
+            "eco": "A"
+          }
+        ],
+        "knowledge_base_sha256": "848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7"
+      },
+      "dataset_evaluation": {
+        "dataset_name": "BIOOS Automated Check Snapshot_evaluation",
+        "modality": "RNA-seq",
+        "tissue": null,
+        "cell_type": null,
+        "signals": [
+          "TNF up",
+          "IL6 up",
+          "IFNG up",
+          "CXCL10 up"
+        ],
+        "active_states": [
+          {
+            "name": "Acute Inflammation",
+            "score": 0.5,
+            "matched_signals": [
+              "IL6 UP",
+              "TNF UP"
+            ],
+            "anchor_hits": [
+              "IL6 UP",
+              "TNF UP"
+            ],
+            "supporting_hits": [],
+            "missing_context_checks": [
+              "secreted protein vs mRNA level",
+              "timepoint / acute vs chronic duration"
+            ],
+            "not_a_diagnosis": true
+          },
+          {
+            "name": "Interferon State",
+            "score": 0.5,
+            "matched_signals": [
+              "CXCL10 UP",
+              "IFNG UP"
+            ],
+            "anchor_hits": [
+              "CXCL10 UP",
+              "IFNG UP"
+            ],
+            "supporting_hits": [],
+            "missing_context_checks": [
+              "downstream ISG confirmation",
+              "producer vs responder cell type"
+            ],
+            "not_a_diagnosis": true
+          }
+        ],
+        "modality_warnings": [
+          "Transcript-level measurement (RNA-seq) does not directly confirm protein abundance, post-translational activation, or cytokine secretion."
+        ],
+        "disclaimer": "Not a clinical diagnosis; hypothesis-supportive regulatory assessment only.",
+        "knowledge_base_sha256": "848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7"
+      },
+      "knowledge_base_sha256": "848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7"
+    },
+    "provenance": {
+      "@context": "http://www.w3.org/ns/prov#",
+      "prov:type": "prov:Entity",
+      "prov:wasGeneratedBy": {
+        "prov:type": "prov:Activity",
+        "prov:wasAssociatedWith": {
+          "prov:type": "prov:Agent",
+          "name": "BIOOS-Check-Runner"
+        },
+        "prov:endedAtTime": "2026-11-21T14:25:07.512199+00:00"
+      },
+      "prov:wasDerivedFrom": "kb:sha256:848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7"
     }
+  },
+  "verification": {
+    "valid": true,
+    "payload_sha256_valid": true,
+    "recomputed_payload_sha256": "985e4a882bbadfd264d10165b70f4113feb973499dbd729d1e25e204e378244c",
+    "recorded_payload_sha256": "985e4a882bbadfd264d10165b70f4113feb973499dbd729d1e25e204e378244c",
+    "recorded_knowledge_base_sha256": "848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7",
+    "current_knowledge_base_sha256": "848787d2c2f1964a1367368ba549d1b1d3ce6f9913b37d91a29d32343aab6cd7",
+    "knowledge_base_unchanged": true
   },
   "applied_cli_filters": {
     "eco_levels": [
