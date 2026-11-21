@@ -43,3 +43,42 @@ def create_v2_regulatory_graph_snapshot(
         graph_result=graph_result,
         max_hypotheses=payload.max_hypotheses,
     )
+
+import hmac
+
+from bioos.graph_hypotheses import compute_snapshot_sha256
+
+
+class SnapshotVerificationResponse(BaseModel):
+    """SHA-256 integrity verification result for a v0.2 snapshot."""
+
+    model_config = ConfigDict(frozen=True)
+
+    valid: bool
+    schema_version: str
+    provided_sha256: str
+    computed_sha256: str
+
+
+SnapshotVerificationResponse.model_rebuild()
+
+
+@router.post(
+    "/regulatory-graph/snapshots/verify",
+    response_model=SnapshotVerificationResponse,
+)
+def verify_v2_regulatory_graph_snapshot(
+    snapshot: RegulatoryGraphSnapshot,
+) -> SnapshotVerificationResponse:
+    computed = compute_snapshot_sha256(
+        snapshot.graph_result,
+        snapshot.hypotheses,
+    )
+    provided_normalized = snapshot.sha256.strip().lower()
+    is_valid = hmac.compare_digest(provided_normalized, computed.lower())
+    return SnapshotVerificationResponse(
+        valid=is_valid,
+        schema_version=snapshot.schema_version,
+        provided_sha256=snapshot.sha256,
+        computed_sha256=computed,
+    )
