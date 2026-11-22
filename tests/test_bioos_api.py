@@ -7,20 +7,23 @@ from bioos.main import app
 
 client = TestClient(app)
 
-def test_health_endpoint():
+def test_health_endpoint() -> None:
     r = client.get("/health")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["assertions_count"] == 5
+    assert body["assertions_count"] == 8
+    assert isinstance(body["knowledge_base_sha256"], str)
     assert len(body["knowledge_base_sha256"]) == 64
 
-def test_filtered_assertions_blood_eco_a():
+
+def test_filtered_assertions_blood_eco_a() -> None:
     r = client.get("/v1/assertions", params={"tissue": "Blood", "eco_levels": ["A"]})
     assert r.status_code == 200
     items = r.json()
-    assert len(items) == 2
-    assert {x["id"] for x in items} == {"BIOOS:A0004871", "BIOOS:A0004874"}
+    assert len(items) == 3
+    ids = {item["id"] for item in items}
+    assert ids == {"BIOOS:A0004871", "BIOOS:A0004874", "BIOOS:A0004902"}
 
 def test_filtered_graph_traversal_liver_from_tnf():
     r = client.get("/v1/graph", params={"start": "TNF", "max_hops": 2, "min_eco": "A", "tissue": "Liver"})
