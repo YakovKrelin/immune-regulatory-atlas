@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class RegulationDirection(str, Enum):
-    """Направление влияния регуляторного ребра."""
+    """Direction of influence for a regulatory edge."""
 
     ACTIVATION = "activation"
     INHIBITION = "inhibition"
@@ -15,7 +14,7 @@ class RegulationDirection(str, Enum):
 
 
 class ConflictPolicy(str, Enum):
-    """Политика разрешения противоречивых регуляторных связей."""
+    """Resolution policy for conflicting regulatory edges."""
 
     KEEP_FLAGGED = "keep_flagged"
     PREFER_HIGHER_SCORE = "prefer_higher_score"
@@ -23,7 +22,7 @@ class ConflictPolicy(str, Enum):
 
 
 class RegulatoryEdge(BaseModel):
-    """Направленное регуляторное ребро между двумя биологическими сущностями."""
+    """Directed regulatory edge between two biological entities."""
 
     model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
 
@@ -39,7 +38,7 @@ class RegulatoryEdge(BaseModel):
 
 
 class SubgraphQuery(BaseModel):
-    """Параметры фильтрации и извлечения контекстного подграфа."""
+    """Parameters for filtering and extracting a contextual subgraph."""
 
     model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
 
@@ -53,7 +52,7 @@ class SubgraphQuery(BaseModel):
 
 
 class CausalCandidatePath(BaseModel):
-    """Направленный путь-кандидат для причинного вывода и генерации гипотез."""
+    """Directed candidate path for causal inference and hypothesis generation."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -66,7 +65,7 @@ class CausalCandidatePath(BaseModel):
 
 
 class RegulatoryGraphResult(BaseModel):
-    """Итоговый результат анализа подграфа, конфликтов и путей-кандидатов."""
+    """Aggregated subgraph analysis result, conflicts, and candidate paths."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -84,13 +83,54 @@ CausalCandidatePath.model_rebuild()
 RegulatoryGraphResult.model_rebuild()
 
 
+def _normalize_counter_signs(
+    counter_sign_hits: list[str] | tuple[str, ...] | None,
+) -> set[str]:
+    """Normalize counter-sign labels and leading entity symbols to uppercase."""
+    if not counter_sign_hits:
+        return set()
+    normalized: set[str] = set()
+    for raw in counter_sign_hits:
+        cleaned = str(raw or "").strip().upper()
+        if not cleaned:
+            continue
+        normalized.add(cleaned)
+        token = cleaned.split()[0]
+        if token:
+            normalized.add(token)
+    return normalized
+
+
+def _compute_adjusted_path_score(
+    current_edges: list[RegulatoryEdge],
+    score_acc: float,
+    counter_signs: set[str],
+) -> float:
+    """Compute length-penalized path score adjusted for counter-sign hits."""
+    length_penalty = 1.0 / (1.0 + 0.1 * (len(current_edges) - 1))
+    base_score = score_acc * length_penalty
+
+    if not counter_signs:
+        return round(max(0.0, base_score), 6)
+
+    matched_counter = 0
+    for edge in current_edges:
+        src = edge.source.upper()
+        tgt = edge.target.upper()
+        if src in counter_signs or tgt in counter_signs:
+            matched_counter += 1
+
+    counter_multiplier = max(0.25, 1.0 - 0.15 * matched_counter)
+    return round(max(0.0, base_score * counter_multiplier), 6)
+
+
 def extract_contextual_subgraph(
     edges: list[RegulatoryEdge] | tuple[RegulatoryEdge, ...],
     query: SubgraphQuery,
 ) -> tuple[tuple[str, ...], tuple[RegulatoryEdge, ...]]:
     """
-    Отбирает рёбра по ткани, контексту, доказательствам и порогу уверенности,
-    а затем обходит граф от `seed_entities` в пределах `max_hops`.
+    Filter edges by tissue, context, evidence codes, and confidence threshold,
+    then traverse from `seed_entities` within `max_hops`.
     """
     filtered: list[RegulatoryEdge] = []
     required_eco = set(query.required_evidence_codes)
@@ -134,8 +174,8 @@ def detect_and_resolve_conflicts(
     policy: ConflictPolicy = ConflictPolicy.KEEP_FLAGGED,
 ) -> tuple[tuple[RegulatoryEdge, ...], int]:
     """
-    Находит пары/группы рёбер с одинаковыми `(source, target, tissue, context)`
-    и противоположным знаком регуляции (`activation` vs `inhibition`).
+    Detect edge groups sharing `(source, target, tissue, context)` with opposing
+    regulation directions (`activation` vs `inhibition`) and apply `policy`.
     """
     grouped: dict[tuple[str, str, str | None, str | None], list[RegulatoryEdge]] = {}
     for edge in edges:
@@ -180,16 +220,18 @@ def rank_candidate_paths(
     targets: tuple[str, ...] | None = None,
     max_depth: int = 3,
     top_k: int = 10,
+    counter_sign_hits: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[CausalCandidatePath, ...]:
     """
-    Строит простые направленные пути от `sources` и ранжирует их по произведению
-    `confidence_score` рёбер с учётом длины пути.
+    Build simple directed paths from `sources` and rank them by adjusted
+    `confidence_score` product accounting for path length and `counter_sign_hits`.
     """
     adjacency: dict[str, list[RegulatoryEdge]] = {}
     for edge in edges:
         adjacency.setdefault(edge.source, []).append(edge)
 
     target_set = set(targets) if targets else None
+    counter_signs = _normalize_counter_signs(counter_sign_hits)
     paths: list[CausalCandidatePath] = []
 
     def dfs(
@@ -201,15 +243,23 @@ def rank_candidate_paths(
         if current_edges:
             is_valid_endpoint = target_set is None or current in target_set
             if is_valid_endpoint:
-                length_penalty = 1.0 / (1.0 + 0.1 * (len(current_edges) - 1))
+                adjusted_score = _compute_adjusted_path_score(
+                    current_edges=current_edges,
+                    score_acc=score_acc,
+                    counter_signs=counter_signs,
+                )
+                has_counter_hit = any(
+                    edge.source.upper() in counter_signs or edge.target.upper() in counter_signs
+                    for edge in current_edges
+                )
                 paths.append(
                     CausalCandidatePath(
                         source=current_nodes[0],
                         target=current,
                         nodes=tuple(current_nodes),
                         edges=tuple(current_edges),
-                        path_score=round(score_acc * length_penalty, 6),
-                        has_conflicts=any(e.conflict_flag for e in current_edges),
+                        path_score=adjusted_score,
+                        has_conflicts=any(e.conflict_flag for e in current_edges) or has_counter_hit,
                     )
                 )
 
@@ -245,8 +295,9 @@ def build_regulatory_graph_result(
     edges: list[RegulatoryEdge] | tuple[RegulatoryEdge, ...],
     query: SubgraphQuery,
     targets: tuple[str, ...] | None = None,
+    counter_sign_hits: list[str] | tuple[str, ...] | None = None,
 ) -> RegulatoryGraphResult:
-    """Единая точка сборки результата подграфа для API, гипотез и снапшотов."""
+    """Assemble subgraph analysis result for API routes, hypotheses, and snapshots."""
     nodes, subgraph_edges = extract_contextual_subgraph(edges, query)
     resolved_edges, resolved_conflicts_count = detect_and_resolve_conflicts(
         subgraph_edges,
@@ -257,6 +308,7 @@ def build_regulatory_graph_result(
         sources=query.seed_entities,
         targets=targets,
         max_depth=query.max_hops,
+        counter_sign_hits=counter_sign_hits,
     )
 
     warnings: list[str] = []
