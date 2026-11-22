@@ -10,7 +10,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from bioos.engine.filters import filter_assertions
-from bioos.engine.v0_1_modules import _build_v0_1_modules, _build_v0_1_hypotheses
+from bioos.engine.v0_1_modules import _build_v0_1_hypotheses, _build_v0_1_modules
 
 app = FastAPI(
     title="BIOOS Human Regulatory Atlas API",
@@ -52,16 +52,23 @@ class SnapshotCreateRequest(BaseModel):
     start_node: str = "TNF"
     max_hops: int = 2
     actor: str = "BIOOS-Check-Runner"
+    organism: str | None = None
     tissue: str | None = None
     cell_type: str | None = None
     pathology: str | None = None
     physiology: str | None = None
     stimulus: str | None = None
+    modality: str | None = None
+    phase: str | None = None
+    timepoint: str | None = None
+    translational_status: str | None = None
     eco_levels: list[str] | None = None
     min_eco: str | None = None
+    conflict_only: bool = False
     verify: bool = True
     include_hypotheses: bool = False
     hypotheses_request: HypothesisRequest | None = None
+
 
 class SnapshotVerifyRequest(BaseModel):
     snapshot: dict[str, Any] | None = None
@@ -236,86 +243,115 @@ def _load_initial_assertions() -> list[dict[str, Any]]:
     ]
 
 
-ASSERTIONS: list[dict[str, Any]] = _load_initial_assertions()
-
 V0_1_ASSERTIONS: list[dict[str, Any]] = [
-        {
-            "id": "BIOOS:A0004901",
-            "source": "HIF1A",
-            "target": "VEGFA",
-            "relation": "activates",
-            "eco": "B",
-            "conflict": False,
-            "conflict_status": "none",
-            "context": {
-                "organism": "Homo sapiens",
-                "tissue": "Lung",
-                "cell_type": "Macrophage",
-                "pathology": "Hypoxia",
-                "physiology": "Hypoxic adaptation",
-                "stimulus": "Hypoxia",
-                "modality": "mRNA",
-                "phase": "innate_response",
-                "timepoint": "6h",
-                "translational_status": "primary_human_cells",
-            },
-            "provenance": {
-                "prov_type": "prov:Entity",
-                "derived_from": "bioos_v0_1_hypoxia_seed",
-            },
+    {
+        "id": "BIOOS:A0004901",
+        "source": "HIF1A",
+        "target": "VEGFA",
+        "relation": "activates",
+        "eco": "B",
+        "conflict": False,
+        "conflict_status": "none",
+        "context": {
+            "organism": "Homo sapiens",
+            "tissue": "Lung",
+            "cell_type": "Macrophage",
+            "pathology": "Hypoxia",
+            "physiology": "Hypoxic adaptation",
+            "stimulus": "Hypoxia",
+            "modality": "mRNA",
+            "phase": "innate_response",
+            "timepoint": "6h",
+            "translational_status": "primary_human_cells",
         },
-        {
-            "id": "BIOOS:A0004902",
-            "source": "STAT1",
-            "target": "CXCL10",
-            "relation": "transactivates",
-            "eco": "A",
-            "conflict": False,
-            "conflict_status": "none",
-            "context": {
-                "organism": "Homo sapiens",
-                "tissue": "Blood",
-                "cell_type": "Monocyte",
-                "pathology": "Viral infection",
-                "physiology": "Interferon signaling",
-                "stimulus": "IFNG",
-                "modality": "mRNA",
-                "phase": "amplification_isg",
-                "timepoint": "12h",
-                "translational_status": "primary_human_cells",
-            },
-            "provenance": {
-                "prov_type": "prov:Entity",
-                "derived_from": "bioos_v0_1_interferon_seed",
-            },
+        "provenance": {
+            "prov_type": "prov:Entity",
+            "derived_from": "bioos_v0_1_hypoxia_seed",
         },
-        {
-            "id": "BIOOS:A0004903",
-            "source": "HIF1A",
-            "target": "IFNG",
-            "relation": "contradicts",
-            "eco": "F",
-            "conflict": True,
-            "conflict_status": "context_dependent",
-            "contradicts": ["BIOOS:A0004874"],
-            "context": {
-                "organism": "Homo sapiens",
-                "tissue": "Lung",
-                "cell_type": "Macrophage",
-                "pathology": "Hypoxia",
-                "physiology": "Context switch under hypoxia",
-                "stimulus": "Hypoxia",
-                "modality": "secreted",
-                "phase": "innate_response",
-                "timepoint": "24h",
-                "translational_status": "cell_line",
-            },
-            "provenance": {
-                "prov_type": "prov:Entity",
-                "derived_from": "bioos_v0_1_conflict_seed",
-            },
+    },
+    {
+        "id": "BIOOS:A0004902",
+        "source": "STAT1",
+        "target": "CXCL10",
+        "relation": "transactivates",
+        "eco": "A",
+        "conflict": False,
+        "conflict_status": "none",
+        "context": {
+            "organism": "Homo sapiens",
+            "tissue": "Blood",
+            "cell_type": "Monocyte",
+            "pathology": "Viral infection",
+            "physiology": "Interferon signaling",
+            "stimulus": "IFNG",
+            "modality": "mRNA",
+            "phase": "amplification_isg",
+            "timepoint": "12h",
+            "translational_status": "primary_human_cells",
         },
+        "provenance": {
+            "prov_type": "prov:Entity",
+            "derived_from": "bioos_v0_1_interferon_seed",
+        },
+    },
+    {
+        "id": "BIOOS:A0004903",
+        "source": "HIF1A",
+        "target": "IFNG",
+        "relation": "contradicts",
+        "eco": "F",
+        "conflict": True,
+        "conflict_status": "context_dependent",
+        "contradicts": ["BIOOS:A0004874"],
+        "context": {
+            "organism": "Homo sapiens",
+            "tissue": "Lung",
+            "cell_type": "Macrophage",
+            "pathology": "Hypoxia",
+            "physiology": "Context switch under hypoxia",
+            "stimulus": "Hypoxia",
+            "modality": "secreted",
+            "phase": "innate_response",
+            "timepoint": "24h",
+            "translational_status": "cell_line",
+        },
+        "provenance": {
+            "prov_type": "prov:Entity",
+            "derived_from": "bioos_v0_1_conflict_seed",
+        },
+    },
 ]
+
+
+def _merge_assertions_with_v0_1(
+    base_assertions: list[dict[str, Any]],
+    v0_1_assertions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merges initial assertions with v0.1 seed assertions, deduplicating by assertion ID."""
+    merged: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for item in [*_as_assertion_dicts(base_assertions), *_as_assertion_dicts(v0_1_assertions)]:
+        item_copy = dict(item)
+        assertion_id = str(item_copy.get("id") or "").strip()
+        if assertion_id:
+            if assertion_id in seen_ids:
+                continue
+            seen_ids.add(assertion_id)
+        item_copy.setdefault("conflict_status", "none")
+        if item_copy.get("conflict") and item_copy["conflict_status"] == "none":
+            item_copy["conflict_status"] = "context_dependent"
+        item_copy.setdefault("contradicts", [])
+        merged.append(item_copy)
+
+    return merged
+
+
+ASSERTIONS: list[dict[str, Any]] = _merge_assertions_with_v0_1(
+    _load_initial_assertions(),
+    V0_1_ASSERTIONS,
+)
+
 SNAPSHOT_STORE: dict[str, dict[str, Any]] = {}
 
 
@@ -332,6 +368,10 @@ def _query_assertions(
     pathology: str | None = None,
     physiology: str | None = None,
     stimulus: str | None = None,
+    modality: str | None = None,
+    phase: str | None = None,
+    timepoint: str | None = None,
+    translational_status: str | None = None,
     conflict_only: bool = False,
 ) -> list[dict[str, Any]]:
     normalized_ecos = _split_csv_param(eco_levels)
@@ -345,6 +385,10 @@ def _query_assertions(
         pathology=pathology,
         physiology=physiology,
         stimulus=stimulus,
+        modality=modality,
+        phase=phase,
+        timepoint=timepoint,
+        translational_status=translational_status,
         conflict_only=conflict_only,
     )
 
@@ -360,6 +404,10 @@ def _traverse_graph(
     pathology: str | None = None,
     physiology: str | None = None,
     stimulus: str | None = None,
+    modality: str | None = None,
+    phase: str | None = None,
+    timepoint: str | None = None,
+    translational_status: str | None = None,
     conflict_only: bool = False,
 ) -> dict[str, Any]:
     filtered = _query_assertions(
@@ -371,6 +419,10 @@ def _traverse_graph(
         pathology=pathology,
         physiology=physiology,
         stimulus=stimulus,
+        modality=modality,
+        phase=phase,
+        timepoint=timepoint,
+        translational_status=translational_status,
         conflict_only=conflict_only,
     )
 
@@ -436,6 +488,7 @@ def _evaluate_dataset_payload(
             "name": "Acute Inflammation",
             "anchors": {"TNF UP", "IL6 UP", "TNF", "IL6"},
             "supporting": {"IL1B UP", "IL1B", "CXCL8 UP", "CXCL8", "CRP UP", "CRP"},
+            "counter_signs": {"IL10 UP", "IL10", "TGFB1 UP", "TGFB1", "SOCS3 UP", "SOCS3"},
             "missing_hints": [
                 "secreted protein vs mRNA level",
                 "timepoint / acute vs chronic duration",
@@ -456,6 +509,7 @@ def _evaluate_dataset_payload(
                 "STAT1 UP",
                 "STAT1",
             },
+            "counter_signs": {"SOCS1 UP", "SOCS1", "USP18 UP", "USP18", "PDCD1 UP", "PDCD1"},
             "missing_hints": [
                 "downstream ISG confirmation",
                 "producer vs responder cell type",
@@ -465,6 +519,7 @@ def _evaluate_dataset_payload(
             "name": "Hypoxia",
             "anchors": {"HIF1A UP", "HIF1A", "VEGFA UP", "VEGFA", "LDHA UP", "LDHA"},
             "supporting": {"SLC2A1 UP", "SLC2A1", "EPO UP", "EPO", "BNIP3 UP", "BNIP3"},
+            "counter_signs": {"EGLN1 UP", "EGLN1", "VHL UP", "VHL", "HIF1AN UP", "HIF1AN"},
             "missing_hints": [
                 "protein stabilization vs transcript level",
                 "tissue oxygenation / compartment context",
@@ -475,17 +530,43 @@ def _evaluate_dataset_payload(
     for rule in state_rules:
         anchor_hits = sorted(upper_tokens & rule["anchors"])
         supporting_hits = sorted(upper_tokens & rule["supporting"])
+        counter_sign_hits = sorted(upper_tokens & rule["counter_signs"])
         matched = sorted(set(anchor_hits) | set(supporting_hits))
-        if matched:
-            denom = max(1, len(rule["anchors"]))
-            score = round(min(1.0, len(anchor_hits) / denom), 3)
+
+        if matched or counter_sign_hits:
+            anchor_denom = max(1, len(rule["anchors"]))
+            supporting_denom = max(1, len(rule["supporting"]))
+            total_expected = max(1, len(rule["anchors"]) + len(rule["supporting"]))
+
+            anchor_coverage = len(anchor_hits) / anchor_denom
+            supporting_coverage = len(supporting_hits) / supporting_denom
+            overall_coverage = len(matched) / total_expected
+
+            counter_penalty = min(0.5, 0.15 * len(counter_sign_hits))
+            base_score = len(anchor_hits) / anchor_denom
+            adjusted_score = round(max(0.0, min(1.0, base_score - counter_penalty)), 3)
+
             active_states.append(
                 {
                     "name": rule["name"],
-                    "score": score,
+                    "score": adjusted_score,
+                    "raw_anchor_score": round(min(1.0, base_score), 3),
+                    "counter_sign_penalty": round(counter_penalty, 3),
                     "matched_signals": matched,
                     "anchor_hits": anchor_hits,
                     "supporting_hits": supporting_hits,
+                    "counter_sign_hits": counter_sign_hits,
+                    "coverage_score": round(overall_coverage, 3),
+                    "coverage_breakdown": {
+                        "anchors_matched": len(anchor_hits),
+                        "anchors_total": len(rule["anchors"]),
+                        "anchor_coverage": round(anchor_coverage, 3),
+                        "supporting_matched": len(supporting_hits),
+                        "supporting_total": len(rule["supporting"]),
+                        "supporting_coverage": round(supporting_coverage, 3),
+                        "counter_signs_matched": len(counter_sign_hits),
+                        "counter_signs_total": len(rule["counter_signs"]),
+                    },
                     "missing_context_checks": rule["missing_hints"],
                     "not_a_diagnosis": True,
                 }
@@ -515,27 +596,38 @@ def _build_snapshot(req: SnapshotCreateRequest) -> dict[str, Any]:
     filtered_assertions = _query_assertions(
         eco_levels=req.eco_levels,
         min_eco=req.min_eco,
-        organism=None,
+        organism=req.organism,
         cell_type=req.cell_type,
         tissue=req.tissue,
         pathology=req.pathology,
         physiology=req.physiology,
         stimulus=req.stimulus,
+        modality=req.modality,
+        phase=req.phase,
+        timepoint=req.timepoint,
+        translational_status=req.translational_status,
+        conflict_only=req.conflict_only,
     )
     subgraph = _traverse_graph(
         start=req.start_node,
         max_hops=req.max_hops,
         eco_levels=req.eco_levels,
         min_eco=req.min_eco,
+        organism=req.organism,
         cell_type=req.cell_type,
         tissue=req.tissue,
         pathology=req.pathology,
         physiology=req.physiology,
         stimulus=req.stimulus,
+        modality=req.modality,
+        phase=req.phase,
+        timepoint=req.timepoint,
+        translational_status=req.translational_status,
+        conflict_only=req.conflict_only,
     )
     dataset_eval = _evaluate_dataset_payload(
         name=f"{req.title}_evaluation",
-        modality="RNA-seq",
+        modality=req.modality or "RNA-seq",
         tissue=req.tissue,
         cell_type=req.cell_type,
         signals=signals_list,
@@ -547,6 +639,7 @@ def _build_snapshot(req: SnapshotCreateRequest) -> dict[str, Any]:
         parsed_signals = [s.strip() for s in raw_signals.split(",")] if isinstance(raw_signals, str) else list(raw_signals)
         h_req = getattr(req, "hypotheses_request", None) or HypothesisRequest(
             name=getattr(req, "title", "snapshot_hypotheses"),
+            modality=req.modality or "RNA-seq",
             tissue=getattr(req, "tissue", None),
             cell_type=getattr(req, "cell_type", None),
             signals=parsed_signals,
@@ -560,13 +653,19 @@ def _build_snapshot(req: SnapshotCreateRequest) -> dict[str, Any]:
         "start_node": req.start_node,
         "max_hops": req.max_hops,
         "filters": {
+            "organism": req.organism,
             "tissue": req.tissue,
             "cell_type": req.cell_type,
             "pathology": req.pathology,
             "physiology": req.physiology,
             "stimulus": req.stimulus,
+            "modality": req.modality,
+            "phase": req.phase,
+            "timepoint": req.timepoint,
+            "translational_status": req.translational_status,
             "eco_levels": _split_csv_param(req.eco_levels),
             "min_eco": req.min_eco,
+            "conflict_only": req.conflict_only,
         },
         "assertion_ids": [a.get("id") for a in filtered_assertions],
         "subgraph": subgraph,
@@ -642,6 +741,13 @@ def get_assertions(
     pathology: str | None = Query(default=None, description="Pathology category"),
     physiology: str | None = Query(default=None, description="Physiological state"),
     stimulus: str | None = Query(default=None, description="Stimulus or perturbation"),
+    modality: str | None = Query(default=None, description="Measurement modality, e.g. mRNA or secreted"),
+    phase: str | None = Query(default=None, description="Biological response phase"),
+    timepoint: str | None = Query(default=None, description="Observation timepoint, e.g. 6h, 12h, 24h"),
+    translational_status: str | None = Query(
+        default=None,
+        description="Translational model status, e.g. primary_human_cells or cell_line",
+    ),
     conflict_only: bool = Query(default=False, description="Return only conflicting assertions"),
 ) -> list[dict[str, Any]]:
     return _query_assertions(
@@ -653,6 +759,10 @@ def get_assertions(
         pathology=pathology,
         physiology=physiology,
         stimulus=stimulus,
+        modality=modality,
+        phase=phase,
+        timepoint=timepoint,
+        translational_status=translational_status,
         conflict_only=conflict_only,
     )
 
@@ -669,6 +779,10 @@ def get_graph(
     pathology: str | None = Query(default=None),
     physiology: str | None = Query(default=None),
     stimulus: str | None = Query(default=None),
+    modality: str | None = Query(default=None),
+    phase: str | None = Query(default=None),
+    timepoint: str | None = Query(default=None),
+    translational_status: str | None = Query(default=None),
     conflict_only: bool = Query(default=False),
 ) -> dict[str, Any]:
     return _traverse_graph(
@@ -682,6 +796,10 @@ def get_graph(
         pathology=pathology,
         physiology=physiology,
         stimulus=stimulus,
+        modality=modality,
+        phase=phase,
+        timepoint=timepoint,
+        translational_status=translational_status,
         conflict_only=conflict_only,
     )
 
@@ -772,11 +890,10 @@ def get_v0_1_module(module_id: str) -> dict[str, Any]:
     raise HTTPException(status_code=404, detail=f"Module '{module_id}' not found")
 
 
-
-
 @app.post("/v1/hypotheses/generate")
 def generate_v0_1_hypotheses(req: HypothesisRequest) -> dict[str, Any]:
     return _build_v0_1_hypotheses(req)
+
 
 SnapshotCreateRequest.model_rebuild()
 
