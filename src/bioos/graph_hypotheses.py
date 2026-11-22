@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import json
@@ -38,11 +38,12 @@ RegulatoryGraphSnapshot.model_rebuild()
 
 
 def _format_chain_summary(path: CausalCandidatePath) -> str:
+    """Format a human-readable summary of a candidate path, its score, and conflict status."""
     steps = [
         f"{edge.source} -[{edge.direction.value}:{edge.edge_id}]-> {edge.target}"
         for edge in path.edges
     ]
-    conflict_note = " [contains regulatory conflict]" if path.has_conflicts else ""
+    conflict_note = " [contains regulatory conflict or counter-sign hit]" if path.has_conflicts else ""
     return f"{' ; '.join(steps)} (score={path.path_score}){conflict_note}"
 
 
