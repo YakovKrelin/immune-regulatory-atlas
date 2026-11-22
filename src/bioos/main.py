@@ -11,6 +11,11 @@ from pydantic import BaseModel, Field
 
 from bioos.engine.filters import filter_assertions
 from bioos.engine.v0_1_modules import _build_v0_1_hypotheses, _build_v0_1_modules
+from bioos.engine.v0_1_modules import (
+    _build_v0_1_hypotheses,
+    _build_v0_1_modules,
+    _build_v0_1_timelines,
+)
 
 app = FastAPI(
     title="BIOOS Human Regulatory Atlas API",
@@ -722,6 +727,7 @@ def _verify_snapshot_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
@@ -729,6 +735,14 @@ def health() -> dict[str, Any]:
         "assertions_count": len(ASSERTIONS),
         "knowledge_base_sha256": _knowledge_base_sha256(),
     }
+
+
+@app.get("/v1/timelines")
+def get_v0_1_timelines(
+    axis: str | None = Query(default=None, description="Regulatory axis, e.g. Inflammation, Interferon, Hypoxia"),
+    timepoint: str | None = Query(default=None, description="Observation timepoint, e.g. 6h, 12h, 24h"),
+) -> dict[str, Any]:
+    return _build_v0_1_timelines(axis=axis, timepoint=timepoint)
 
 
 @app.get("/v1/assertions")
