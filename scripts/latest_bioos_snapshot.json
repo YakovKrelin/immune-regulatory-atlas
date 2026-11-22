@@ -1,200 +1,422 @@
-{
-  "snapshot": {
-    "snapshot_id": "snap_33c59962c837",
-    "title": "BIOOS Automated Check Snapshot",
-    "created_at": "2026-11-22T14:58:59.725254+00:00",
-    "knowledge_base_sha256": "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45",
-    "canonical_payload_sha256": "33c59962c837b2316050f50af3e523a3618a03848c9339d5bfc842061dd75e34",
-    "payload": {
-      "hypotheses": null,
-      "title": "BIOOS Automated Check Snapshot",
-      "signals": [
-        "TNF up",
-        "IL6 up",
-        "IFNG up",
-        "CXCL10 up"
-      ],
-      "start_node": "TNF",
-      "max_hops": 2,
-      "filters": {
-        "organism": null,
-        "tissue": null,
-        "cell_type": null,
-        "pathology": null,
-        "physiology": null,
-        "stimulus": null,
-        "modality": null,
-        "phase": null,
-        "timepoint": null,
-        "translational_status": null,
-        "eco_levels": null,
-        "min_eco": null,
-        "conflict_only": false
-      },
-      "assertion_ids": [
-        "BIOOS:A0004871",
-        "BIOOS:A0004874",
-        "BIOOS:A0004880",
-        "BIOOS:A0004881",
-        "BIOOS:A0004882",
-        "BIOOS:A0004901",
-        "BIOOS:A0004902",
-        "BIOOS:A0004903"
-      ],
-      "subgraph": {
-        "start": "TNF",
-        "max_hops": 2,
-        "nodes": [
-          "IL6",
-          "STAT3"
-        ],
-        "all_visited_nodes": [
-          "TNF",
-          "IL6",
-          "STAT3"
-        ],
-        "edges": [
-          {
-            "assertion_id": "BIOOS:A0004871",
-            "source": "TNF",
-            "target": "IL6",
-            "relation": "activates",
-            "eco": "A"
-          },
-          {
-            "assertion_id": "BIOOS:A0004880",
-            "source": "TNF",
-            "target": "IL6",
-            "relation": "activates",
-            "eco": "A"
-          },
-          {
-            "assertion_id": "BIOOS:A0004881",
-            "source": "IL6",
-            "target": "STAT3",
-            "relation": "activates",
-            "eco": "A"
-          }
-        ],
-        "knowledge_base_sha256": "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
-      },
-      "dataset_evaluation": {
-        "dataset_name": "BIOOS Automated Check Snapshot_evaluation",
-        "modality": "RNA-seq",
-        "tissue": null,
-        "cell_type": null,
-        "signals": [
-          "TNF up",
-          "IL6 up",
-          "IFNG up",
-          "CXCL10 up"
-        ],
-        "active_states": [
-          {
-            "name": "Acute Inflammation",
-            "score": 0.5,
-            "raw_anchor_score": 0.5,
-            "counter_sign_penalty": 0.0,
-            "matched_signals": [
-              "IL6 UP",
-              "TNF UP"
-            ],
-            "anchor_hits": [
-              "IL6 UP",
-              "TNF UP"
-            ],
-            "supporting_hits": [],
-            "counter_sign_hits": [],
-            "coverage_score": 0.2,
-            "coverage_breakdown": {
-              "anchors_matched": 2,
-              "anchors_total": 4,
-              "anchor_coverage": 0.5,
-              "supporting_matched": 0,
-              "supporting_total": 6,
-              "supporting_coverage": 0.0,
-              "counter_signs_matched": 0,
-              "counter_signs_total": 6
-            },
-            "missing_context_checks": [
-              "secreted protein vs mRNA level",
-              "timepoint / acute vs chronic duration"
-            ],
-            "not_a_diagnosis": true
-          },
-          {
-            "name": "Interferon State",
-            "score": 0.5,
-            "raw_anchor_score": 0.5,
-            "counter_sign_penalty": 0.0,
-            "matched_signals": [
-              "CXCL10 UP",
-              "IFNG UP"
-            ],
-            "anchor_hits": [
-              "CXCL10 UP",
-              "IFNG UP"
-            ],
-            "supporting_hits": [],
-            "counter_sign_hits": [],
-            "coverage_score": 0.143,
-            "coverage_breakdown": {
-              "anchors_matched": 2,
-              "anchors_total": 4,
-              "anchor_coverage": 0.5,
-              "supporting_matched": 0,
-              "supporting_total": 10,
-              "supporting_coverage": 0.0,
-              "counter_signs_matched": 0,
-              "counter_signs_total": 6
-            },
-            "missing_context_checks": [
-              "downstream ISG confirmation",
-              "producer vs responder cell type"
-            ],
-            "not_a_diagnosis": true
-          }
-        ],
-        "modality_warnings": [
-          "Transcript-level measurement (RNA-seq) does not directly confirm protein abundance, post-translational activation, or cytokine secretion."
-        ],
-        "disclaimer": "Not a clinical diagnosis; hypothesis-supportive regulatory assessment only.",
-        "knowledge_base_sha256": "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
-      },
-      "knowledge_base_sha256": "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
-    },
-    "provenance": {
-      "@context": "http://www.w3.org/ns/prov#",
-      "prov:type": "prov:Entity",
-      "prov:wasGeneratedBy": {
-        "prov:type": "prov:Activity",
-        "prov:wasAssociatedWith": {
-          "prov:type": "prov:Agent",
-          "name": "BIOOS-Check-Runner"
-        },
-        "prov:endedAtTime": "2026-11-22T14:58:59.725254+00:00"
-      },
-      "prov:wasDerivedFrom": "kb:sha256:d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
-    }
-  },
-  "verification": {
-    "valid": true,
-    "payload_sha256_valid": true,
-    "recomputed_payload_sha256": "33c59962c837b2316050f50af3e523a3618a03848c9339d5bfc842061dd75e34",
-    "recorded_payload_sha256": "33c59962c837b2316050f50af3e523a3618a03848c9339d5bfc842061dd75e34",
-    "recorded_knowledge_base_sha256": "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45",
-    "current_knowledge_base_sha256": "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45",
-    "knowledge_base_unchanged": true
-  },
-  "applied_cli_filters": {
-    "eco_levels": [
-      "A"
-    ],
-    "tissue": "Blood"
-  },
-  "filtered_assertions_preview": [
-    "BIOOS:A0004871",
-    "BIOOS:A0004874",
-    "BIOOS:A0004902"
-  ]
+﻿{
+    "snapshot":  {
+                     "snapshot_id":  "snap_b0284b35d2ad",
+                     "title":  "bioos_v0_1_baseline",
+                     "created_at":  "2026-11-22T15:18:48.519901+00:00",
+                     "knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45",
+                     "canonical_payload_sha256":  "b0284b35d2ad59244d2b73d1e591097c9c9388ab99a8483b91211da67678e528",
+                     "payload":  {
+                                     "hypotheses":  {
+                                                        "run_name":  "bioos_v0_1_baseline",
+                                                        "version":  "0.1",
+                                                        "modality":  "RNA-seq",
+                                                        "tissue":  null,
+                                                        "cell_type":  null,
+                                                        "active_states":  [
+                                                                              {
+                                                                                  "name":  "Acute Inflammation",
+                                                                                  "score":  0.5,
+                                                                                  "raw_anchor_score":  0.5,
+                                                                                  "counter_sign_penalty":  0.0,
+                                                                                  "matched_signals":  [
+                                                                                                          "IL6 UP",
+                                                                                                          "TNF UP"
+                                                                                                      ],
+                                                                                  "anchor_hits":  [
+                                                                                                      "IL6 UP",
+                                                                                                      "TNF UP"
+                                                                                                  ],
+                                                                                  "supporting_hits":  [
+
+                                                                                                      ],
+                                                                                  "counter_sign_hits":  [
+
+                                                                                                        ],
+                                                                                  "coverage_score":  0.2,
+                                                                                  "coverage_breakdown":  {
+                                                                                                             "anchors_matched":  2,
+                                                                                                             "anchors_total":  4,
+                                                                                                             "anchor_coverage":  0.5,
+                                                                                                             "supporting_matched":  0,
+                                                                                                             "supporting_total":  6,
+                                                                                                             "supporting_coverage":  0.0,
+                                                                                                             "counter_signs_matched":  0,
+                                                                                                             "counter_signs_total":  6
+                                                                                                         },
+                                                                                  "missing_context_checks":  [
+                                                                                                                 "secreted protein vs mRNA level",
+                                                                                                                 "timepoint / acute vs chronic duration"
+                                                                                                             ],
+                                                                                  "not_a_diagnosis":  true
+                                                                              },
+                                                                              {
+                                                                                  "name":  "Interferon State",
+                                                                                  "score":  0.25,
+                                                                                  "raw_anchor_score":  0.25,
+                                                                                  "counter_sign_penalty":  0.0,
+                                                                                  "matched_signals":  [
+                                                                                                          "IFNG UP"
+                                                                                                      ],
+                                                                                  "anchor_hits":  [
+                                                                                                      "IFNG UP"
+                                                                                                  ],
+                                                                                  "supporting_hits":  [
+
+                                                                                                      ],
+                                                                                  "counter_sign_hits":  [
+
+                                                                                                        ],
+                                                                                  "coverage_score":  0.071,
+                                                                                  "coverage_breakdown":  {
+                                                                                                             "anchors_matched":  1,
+                                                                                                             "anchors_total":  4,
+                                                                                                             "anchor_coverage":  0.25,
+                                                                                                             "supporting_matched":  0,
+                                                                                                             "supporting_total":  10,
+                                                                                                             "supporting_coverage":  0.0,
+                                                                                                             "counter_signs_matched":  0,
+                                                                                                             "counter_signs_total":  6
+                                                                                                         },
+                                                                                  "missing_context_checks":  [
+                                                                                                                 "downstream ISG confirmation",
+                                                                                                                 "producer vs responder cell type"
+                                                                                                             ],
+                                                                                  "not_a_diagnosis":  true
+                                                                              },
+                                                                              {
+                                                                                  "name":  "Hypoxia",
+                                                                                  "score":  0.167,
+                                                                                  "raw_anchor_score":  0.167,
+                                                                                  "counter_sign_penalty":  0.0,
+                                                                                  "matched_signals":  [
+                                                                                                          "HIF1A UP"
+                                                                                                      ],
+                                                                                  "anchor_hits":  [
+                                                                                                      "HIF1A UP"
+                                                                                                  ],
+                                                                                  "supporting_hits":  [
+
+                                                                                                      ],
+                                                                                  "counter_sign_hits":  [
+
+                                                                                                        ],
+                                                                                  "coverage_score":  0.083,
+                                                                                  "coverage_breakdown":  {
+                                                                                                             "anchors_matched":  1,
+                                                                                                             "anchors_total":  6,
+                                                                                                             "anchor_coverage":  0.167,
+                                                                                                             "supporting_matched":  0,
+                                                                                                             "supporting_total":  6,
+                                                                                                             "supporting_coverage":  0.0,
+                                                                                                             "counter_signs_matched":  0,
+                                                                                                             "counter_signs_total":  6
+                                                                                                         },
+                                                                                  "missing_context_checks":  [
+                                                                                                                 "protein stabilization vs transcript level",
+                                                                                                                 "tissue oxygenation / compartment context"
+                                                                                                             ],
+                                                                                  "not_a_diagnosis":  true
+                                                                              }
+                                                                          ],
+                                                        "hypotheses":  [
+                                                                           {
+                                                                               "hypothesis_id":  "HYP:V0_1:INFLAMMATION",
+                                                                               "version":  "0.1",
+                                                                               "axis":  "Inflammation",
+                                                                               "module_id":  "MOD:V0_1:INFLAMMATION",
+                                                                               "active_state":  "Acute Inflammation",
+                                                                               "state_score":  0.5,
+                                                                               "matched_signals":  [
+                                                                                                       "IL6 UP",
+                                                                                                       "TNF UP"
+                                                                                                   ],
+                                                                               "supporting_assertion_ids":  [
+
+                                                                                                            ],
+                                                                               "conflict_assertion_ids":  [
+
+                                                                                                          ],
+                                                                               "context_checks_required":  [
+                                                                                                               "secreted protein vs mRNA level",
+                                                                                                               "timepoint / acute vs chronic duration"
+                                                                                                           ],
+                                                                               "statement":  "Inflammation axis (MOD:V0_1:INFLAMMATION) shows active state \u0027Acute Inflammation\u0027 with 0 supporting assertions and 0 context-dependent/conflicting edge(s).",
+                                                                               "not_a_diagnosis":  true
+                                                                           },
+                                                                           {
+                                                                               "hypothesis_id":  "HYP:V0_1:INTERFERON",
+                                                                               "version":  "0.1",
+                                                                               "axis":  "Interferon",
+                                                                               "module_id":  "MOD:V0_1:INTERFERON",
+                                                                               "active_state":  "Interferon State",
+                                                                               "state_score":  0.25,
+                                                                               "matched_signals":  [
+                                                                                                       "IFNG UP"
+                                                                                                   ],
+                                                                               "supporting_assertion_ids":  [
+                                                                                                                "BIOOS:A0004902"
+                                                                                                            ],
+                                                                               "conflict_assertion_ids":  [
+                                                                                                              "BIOOS:A0004903"
+                                                                                                          ],
+                                                                               "context_checks_required":  [
+                                                                                                               "downstream ISG confirmation",
+                                                                                                               "producer vs responder cell type"
+                                                                                                           ],
+                                                                               "statement":  "Interferon axis (MOD:V0_1:INTERFERON) shows active state \u0027Interferon State\u0027 with 1 supporting assertions and 1 context-dependent/conflicting edge(s).",
+                                                                               "not_a_diagnosis":  true
+                                                                           },
+                                                                           {
+                                                                               "hypothesis_id":  "HYP:V0_1:HYPOXIA",
+                                                                               "version":  "0.1",
+                                                                               "axis":  "Hypoxia",
+                                                                               "module_id":  "MOD:V0_1:HYPOXIA",
+                                                                               "active_state":  "Hypoxia",
+                                                                               "state_score":  0.167,
+                                                                               "matched_signals":  [
+                                                                                                       "HIF1A UP"
+                                                                                                   ],
+                                                                               "supporting_assertion_ids":  [
+                                                                                                                "BIOOS:A0004901"
+                                                                                                            ],
+                                                                               "conflict_assertion_ids":  [
+                                                                                                              "BIOOS:A0004903"
+                                                                                                          ],
+                                                                               "context_checks_required":  [
+                                                                                                               "protein stabilization vs transcript level",
+                                                                                                               "tissue oxygenation / compartment context"
+                                                                                                           ],
+                                                                               "statement":  "Hypoxia axis (MOD:V0_1:HYPOXIA) shows active state \u0027Hypoxia\u0027 with 1 supporting assertions and 1 context-dependent/conflicting edge(s).",
+                                                                               "not_a_diagnosis":  true
+                                                                           }
+                                                                       ],
+                                                        "crosstalk_notes":  [
+                                                                                "Evaluate HIF1A-driven hypoxia adaptation alongside inflammatory/interferon signaling and context-dependent conflict edges.",
+                                                                                "Concurrent Inflammation and Interferon signals detected; verify cell-type specificity and temporal phase before inferring synergy or antagonism."
+                                                                            ],
+                                                        "modality_warnings":  [
+                                                                                  "Transcript-level measurement (RNA-seq) does not directly confirm protein abundance, post-translational activation, or cytokine secretion."
+                                                                              ],
+                                                        "disclaimer":  "Not a clinical diagnosis; hypothesis-supportive regulatory assessment only.",
+                                                        "knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
+                                                    },
+                                     "title":  "bioos_v0_1_baseline",
+                                     "signals":  [
+                                                     "TNF UP",
+                                                     "IL6 UP",
+                                                     "HIF1A UP",
+                                                     "IFNG UP"
+                                                 ],
+                                     "start_node":  "TNF",
+                                     "max_hops":  2,
+                                     "filters":  {
+                                                     "organism":  null,
+                                                     "tissue":  null,
+                                                     "cell_type":  null,
+                                                     "pathology":  null,
+                                                     "physiology":  null,
+                                                     "stimulus":  null,
+                                                     "modality":  null,
+                                                     "phase":  null,
+                                                     "timepoint":  null,
+                                                     "translational_status":  null,
+                                                     "eco_levels":  null,
+                                                     "min_eco":  null,
+                                                     "conflict_only":  false
+                                                 },
+                                     "assertion_ids":  [
+                                                           "BIOOS:A0004871",
+                                                           "BIOOS:A0004874",
+                                                           "BIOOS:A0004880",
+                                                           "BIOOS:A0004881",
+                                                           "BIOOS:A0004882",
+                                                           "BIOOS:A0004901",
+                                                           "BIOOS:A0004902",
+                                                           "BIOOS:A0004903"
+                                                       ],
+                                     "subgraph":  {
+                                                      "start":  "TNF",
+                                                      "max_hops":  2,
+                                                      "nodes":  [
+                                                                    "IL6",
+                                                                    "STAT3"
+                                                                ],
+                                                      "all_visited_nodes":  [
+                                                                                "TNF",
+                                                                                "IL6",
+                                                                                "STAT3"
+                                                                            ],
+                                                      "edges":  [
+                                                                    {
+                                                                        "assertion_id":  "BIOOS:A0004871",
+                                                                        "source":  "TNF",
+                                                                        "target":  "IL6",
+                                                                        "relation":  "activates",
+                                                                        "eco":  "A"
+                                                                    },
+                                                                    {
+                                                                        "assertion_id":  "BIOOS:A0004880",
+                                                                        "source":  "TNF",
+                                                                        "target":  "IL6",
+                                                                        "relation":  "activates",
+                                                                        "eco":  "A"
+                                                                    },
+                                                                    {
+                                                                        "assertion_id":  "BIOOS:A0004881",
+                                                                        "source":  "IL6",
+                                                                        "target":  "STAT3",
+                                                                        "relation":  "activates",
+                                                                        "eco":  "A"
+                                                                    }
+                                                                ],
+                                                      "knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
+                                                  },
+                                     "dataset_evaluation":  {
+                                                                "dataset_name":  "bioos_v0_1_baseline_evaluation",
+                                                                "modality":  "RNA-seq",
+                                                                "tissue":  null,
+                                                                "cell_type":  null,
+                                                                "signals":  [
+                                                                                "TNF UP",
+                                                                                "IL6 UP",
+                                                                                "HIF1A UP",
+                                                                                "IFNG UP"
+                                                                            ],
+                                                                "active_states":  [
+                                                                                      {
+                                                                                          "name":  "Acute Inflammation",
+                                                                                          "score":  0.5,
+                                                                                          "raw_anchor_score":  0.5,
+                                                                                          "counter_sign_penalty":  0.0,
+                                                                                          "matched_signals":  [
+                                                                                                                  "IL6 UP",
+                                                                                                                  "TNF UP"
+                                                                                                              ],
+                                                                                          "anchor_hits":  [
+                                                                                                              "IL6 UP",
+                                                                                                              "TNF UP"
+                                                                                                          ],
+                                                                                          "supporting_hits":  [
+
+                                                                                                              ],
+                                                                                          "counter_sign_hits":  [
+
+                                                                                                                ],
+                                                                                          "coverage_score":  0.2,
+                                                                                          "coverage_breakdown":  {
+                                                                                                                     "anchors_matched":  2,
+                                                                                                                     "anchors_total":  4,
+                                                                                                                     "anchor_coverage":  0.5,
+                                                                                                                     "supporting_matched":  0,
+                                                                                                                     "supporting_total":  6,
+                                                                                                                     "supporting_coverage":  0.0,
+                                                                                                                     "counter_signs_matched":  0,
+                                                                                                                     "counter_signs_total":  6
+                                                                                                                 },
+                                                                                          "missing_context_checks":  [
+                                                                                                                         "secreted protein vs mRNA level",
+                                                                                                                         "timepoint / acute vs chronic duration"
+                                                                                                                     ],
+                                                                                          "not_a_diagnosis":  true
+                                                                                      },
+                                                                                      {
+                                                                                          "name":  "Interferon State",
+                                                                                          "score":  0.25,
+                                                                                          "raw_anchor_score":  0.25,
+                                                                                          "counter_sign_penalty":  0.0,
+                                                                                          "matched_signals":  [
+                                                                                                                  "IFNG UP"
+                                                                                                              ],
+                                                                                          "anchor_hits":  [
+                                                                                                              "IFNG UP"
+                                                                                                          ],
+                                                                                          "supporting_hits":  [
+
+                                                                                                              ],
+                                                                                          "counter_sign_hits":  [
+
+                                                                                                                ],
+                                                                                          "coverage_score":  0.071,
+                                                                                          "coverage_breakdown":  {
+                                                                                                                     "anchors_matched":  1,
+                                                                                                                     "anchors_total":  4,
+                                                                                                                     "anchor_coverage":  0.25,
+                                                                                                                     "supporting_matched":  0,
+                                                                                                                     "supporting_total":  10,
+                                                                                                                     "supporting_coverage":  0.0,
+                                                                                                                     "counter_signs_matched":  0,
+                                                                                                                     "counter_signs_total":  6
+                                                                                                                 },
+                                                                                          "missing_context_checks":  [
+                                                                                                                         "downstream ISG confirmation",
+                                                                                                                         "producer vs responder cell type"
+                                                                                                                     ],
+                                                                                          "not_a_diagnosis":  true
+                                                                                      },
+                                                                                      {
+                                                                                          "name":  "Hypoxia",
+                                                                                          "score":  0.167,
+                                                                                          "raw_anchor_score":  0.167,
+                                                                                          "counter_sign_penalty":  0.0,
+                                                                                          "matched_signals":  [
+                                                                                                                  "HIF1A UP"
+                                                                                                              ],
+                                                                                          "anchor_hits":  [
+                                                                                                              "HIF1A UP"
+                                                                                                          ],
+                                                                                          "supporting_hits":  [
+
+                                                                                                              ],
+                                                                                          "counter_sign_hits":  [
+
+                                                                                                                ],
+                                                                                          "coverage_score":  0.083,
+                                                                                          "coverage_breakdown":  {
+                                                                                                                     "anchors_matched":  1,
+                                                                                                                     "anchors_total":  6,
+                                                                                                                     "anchor_coverage":  0.167,
+                                                                                                                     "supporting_matched":  0,
+                                                                                                                     "supporting_total":  6,
+                                                                                                                     "supporting_coverage":  0.0,
+                                                                                                                     "counter_signs_matched":  0,
+                                                                                                                     "counter_signs_total":  6
+                                                                                                                 },
+                                                                                          "missing_context_checks":  [
+                                                                                                                         "protein stabilization vs transcript level",
+                                                                                                                         "tissue oxygenation / compartment context"
+                                                                                                                     ],
+                                                                                          "not_a_diagnosis":  true
+                                                                                      }
+                                                                                  ],
+                                                                "modality_warnings":  [
+                                                                                          "Transcript-level measurement (RNA-seq) does not directly confirm protein abundance, post-translational activation, or cytokine secretion."
+                                                                                      ],
+                                                                "disclaimer":  "Not a clinical diagnosis; hypothesis-supportive regulatory assessment only.",
+                                                                "knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
+                                                            },
+                                     "knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
+                                 },
+                     "provenance":  {
+                                        "@context":  "http://www.w3.org/ns/prov#",
+                                        "prov:type":  "prov:Entity",
+                                        "prov:wasGeneratedBy":  {
+                                                                    "prov:type":  "prov:Activity",
+                                                                    "prov:wasAssociatedWith":  {
+                                                                                                   "prov:type":  "prov:Agent",
+                                                                                                   "name":  "BIOOS-Check-Runner"
+                                                                                               },
+                                                                    "prov:endedAtTime":  "2026-11-22T15:18:48.519901+00:00"
+                                                                },
+                                        "prov:wasDerivedFrom":  "kb:sha256:d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45"
+                                    }
+                 },
+    "verification":  {
+                         "valid":  true,
+                         "payload_sha256_valid":  true,
+                         "recomputed_payload_sha256":  "b0284b35d2ad59244d2b73d1e591097c9c9388ab99a8483b91211da67678e528",
+                         "recorded_payload_sha256":  "b0284b35d2ad59244d2b73d1e591097c9c9388ab99a8483b91211da67678e528",
+                         "recorded_knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45",
+                         "current_knowledge_base_sha256":  "d5b5d0e298cae7cdecc2d19bb5087750312008604d3ce4c4f93f21ba8c990f45",
+                         "knowledge_base_unchanged":  true
+                     }
 }
