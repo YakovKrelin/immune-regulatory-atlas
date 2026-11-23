@@ -55,6 +55,7 @@ def test_sign_consistency_and_context_ranking():
     res = score_candidate_path_v02(path_id="P_SIGN", edges=edges)
     assert res["sign_consistency_score"] == 1.0
     assert res["sign_bonus"] > 0.0
+    assert res["context_agreement_rate"] == 1.0
 
     ctx_ranked = rank_contexts_for_path_v02(
         path_id="P_SIGN",
@@ -66,6 +67,32 @@ def test_sign_consistency_and_context_ranking():
     )
     assert [c["context_id"] for c in ctx_ranked] == ["CTX_HIGH", "CTX_LOW"]
     assert [c["rank"] for c in ctx_ranked] == [1, 2]
+
+
+def test_active_marker_coverage_and_context_agreement():
+    high_cov = {
+        "path_id": "P_HIGH_COV",
+        "edges": [
+            {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}},
+            {"id": "E2", "subject": "IL6", "object": "STAT3", "conflict": False, "context": {"tissue": "Blood"}},
+        ],
+    }
+    low_cov = {
+        "path_id": "P_LOW_COV",
+        "edges": [
+            {"id": "E3", "subject": "TNF", "object": "OTHER", "conflict": False, "context": {"tissue": "Blood"}},
+            {"id": "E4", "subject": "OTHER", "object": "NOISE", "conflict": False, "context": {"tissue": "Liver"}},
+        ],
+    }
+
+    ranked = rank_paths_with_context_v02(
+        candidates=[low_cov, high_cov],
+        active_markers=["TNF", "IL6", "STAT3"],
+    )
+    assert [r["path_id"] for r in ranked] == ["P_HIGH_COV", "P_LOW_COV"]
+    assert ranked[0]["active_marker_coverage"] == 1.0
+    assert ranked[0]["context_agreement_rate"] == 1.0
+    assert ranked[1]["context_agreement_rate"] == 0.0
 
 
 def test_snapshot_provenance_envelope():

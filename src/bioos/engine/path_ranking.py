@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,6 +36,7 @@ def _norm_sign(value: Any) -> int:
 class PathScoringWeights:
     base_edge_score: float = 1.0
     anchor_bonus_per_match: float = 0.25
+    active_coverage_bonus: float = 0.30
     context_match_bonus: float = 0.20
     context_coverage_bonus: float = 0.35
     evidence_bonus_per_edge: float = 0.10
@@ -57,8 +59,9 @@ def score_candidate_path_v02(
     counters = _norm_set(counter_markers)
     ctx = target_context or {}
 
+    context_fields = ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco")
     requested_ctx_fields = [
-        field for field in ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco")
+        field for field in context_fields
         if _norm_str(ctx.get(field))
     ]
 
@@ -71,6 +74,7 @@ def score_candidate_path_v02(
     context_matches = 0
     supported_edges = 0
     signs: list[int] = []
+    field_values: dict[str, list[str]] = {field: [] for field in context_fields}
 
     for edge in edges:
         subj = str(edge.get("subject", "")).strip().upper()
@@ -85,9 +89,11 @@ def score_candidate_path_v02(
             signs.append(sign_val)
 
         edge_ctx = edge.get("context") if isinstance(edge.get("context"), dict) else edge
-        for field in ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco"):
+        for field in context_fields:
             expected = _norm_str(ctx.get(field))
             actual = _norm_str(edge_ctx.get(field))
+            if actual:
+                field_values[field].append(actual)
             if expected and actual and expected == actual:
                 context_matches += 1
                 matched_context_fields.add(field)
@@ -99,13 +105,36 @@ def score_candidate_path_v02(
         if (has_strong_eco or has_positive_ev) and not bool(edge.get("conflict")):
             supported_edges += 1
 
+    matched_active = sorted(path_tokens & active)
     matched_anchors = sorted((path_tokens | active) & anchors)
     matched_counters = sorted((path_tokens | active) & counters)
+
+    active_marker_coverage = (
+        round(len(matched_active) / len(active), 4)
+        if active
+        else 0.0
+    )
 
     context_coverage = (
         round(len(matched_context_fields) / len(requested_ctx_fields), 4)
         if requested_ctx_fields
         else 0.0
+    )
+
+    agreed_fields = 0
+    populated_fields = 0
+    for field in context_fields:
+        vals = field_values[field]
+        if len(vals) >= 2:
+            populated_fields += 1
+            top_count = Counter(vals).most_common(1)[0][1]
+            if top_count == len(vals):
+                agreed_fields += 1
+
+    context_agreement_rate = (
+        round(agreed_fields / populated_fields, 4)
+        if populated_fields > 0
+        else (1.0 if edge_count > 0 else 0.0)
     )
 
     sign_flips = 0
@@ -124,6 +153,7 @@ def score_candidate_path_v02(
 
     raw_score = edge_count * weights.base_edge_score
     anchor_bonus = round(len(matched_anchors) * weights.anchor_bonus_per_match, 4)
+    active_coverage_bonus = round(active_marker_coverage * weights.active_coverage_bonus, 4)
     context_bonus = round(
         context_matches * weights.context_match_bonus
         + context_coverage * weights.context_coverage_bonus,
@@ -137,6 +167,7 @@ def score_candidate_path_v02(
     net_score = round(
         raw_score
         + anchor_bonus
+        + active_coverage_bonus
         + context_bonus
         + evidence_bonus
         + sign_bonus
@@ -150,15 +181,19 @@ def score_candidate_path_v02(
         "edge_count": edge_count,
         "conflict_count": conflict_count,
         "conflicting_edge_ids": [str(e.get("id", "")) for e in conflict_edges if e.get("id")],
+        "matched_active_markers": matched_active,
+        "active_marker_coverage": active_marker_coverage,
         "matched_anchors": matched_anchors,
         "matched_counter_markers": matched_counters,
         "matched_context_fields": sorted(matched_context_fields),
         "context_coverage": context_coverage,
+        "context_agreement_rate": context_agreement_rate,
         "supported_edges": supported_edges,
         "sign_consistency_score": sign_consistency_score,
         "sign_flips": sign_flips,
         "raw_score": round(raw_score, 4),
         "anchor_bonus": anchor_bonus,
+        "active_coverage_bonus": active_coverage_bonus,
         "context_bonus": context_bonus,
         "evidence_bonus": evidence_bonus,
         "sign_bonus": sign_bonus,
