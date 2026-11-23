@@ -18,7 +18,8 @@ def build_hypotheses_from_signals(signals_text: str, assertions: list[Assertion]
         if (has_ifn and has_infl)
         else f"H1: Cascade activation involving {', '.join(signals) or 'selected factors'}."
     )
-    has_conflicts = any(a.conflict for a in matched)
+    conflict_items = [a.model_dump() for a in matched if a.conflict]
+    has_conflicts = bool(conflict_items)
     return {
         "inference_type": "hypothesis_compatibility_not_certainty",
         "signals": signals,
@@ -30,13 +31,15 @@ def build_hypotheses_from_signals(signals_text: str, assertions: list[Assertion]
             "H5: Cell-composition artifact.",
         ],
         "missing_markers": ["ISG15", "MX1", "OAS1", "IL1B", "CRP", "Cell subset fractions"],
+        "counter_markers_to_check": ["IL10", "TGFB1"],
         "uncertainty_breakdown": {
             "data": "moderate" if matched else "high",
             "model": "moderate",
             "context": "high",
             "translational_transfer": "moderate",
         },
-        "conflicts": [a.model_dump() for a in matched if a.conflict],
+        "conflict_count": len(conflict_items),
+        "conflicts": conflict_items,
         "bifurcation_note": (
             "Conflicting or multi-axis signals present; distinguish competing hypotheses with targeted assays and cell composition."
             if has_conflicts or (has_ifn and has_infl)

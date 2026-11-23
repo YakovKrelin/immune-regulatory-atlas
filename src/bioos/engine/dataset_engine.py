@@ -64,9 +64,10 @@ def evaluate_dataset(
         matched_counters = sorted(active_symbols & counter_tokens)
 
         denominator = max(len(driver_tokens), 1)
-        raw_coverage = len(matched_drivers) / denominator
+        driver_coverage = len(matched_drivers) / denominator
+        anchor_bonus = (0.1 * len(matched_anchors)) if anchor_tokens else 0.0
         counter_penalty = round(min(0.5, 0.15 * len(matched_counters)), 3)
-        adjusted_coverage = round(max(0.0, raw_coverage - counter_penalty), 3)
+        adjusted_coverage = round(max(0.0, min(1.0, driver_coverage + anchor_bonus - counter_penalty)), 3)
 
         score_obj = EvaluatedStateScore(
             state_id=state.id,
