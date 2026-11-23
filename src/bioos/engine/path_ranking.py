@@ -256,6 +256,115 @@ def score_candidate_path_v02(
     }
 
 
+def build_consensus_report_v02(
+    consensus_rows: list[dict[str, Any]],
+    min_mean_net_score: float | None = None,
+    min_mean_normalized_confidence: float | None = None,
+    max_conflict_rate: float | None = None,
+    min_zero_conflict_contexts: int | None = None,
+    snapshot_id: str | None = None,
+    sha256: str | None = None,
+) -> dict[str, Any]:
+    evaluated = filter_consensus_by_thresholds_v02(
+        consensus_rows=consensus_rows,
+        min_mean_net_score=min_mean_net_score,
+        min_mean_normalized_confidence=min_mean_normalized_confidence,
+        max_conflict_rate=max_conflict_rate,
+        min_zero_conflict_contexts=min_zero_conflict_contexts,
+        include_rejected=True,
+    )
+    accepted = [row for row in evaluated if bool(row.get("accepted"))]
+    rejected = [row for row in evaluated if not bool(row.get("accepted"))]
+    scores = [float(row.get("mean_net_score", 0.0)) for row in evaluated]
+    mean_consensus_score = round(sum(scores) / len(scores), 4) if scores else 0.0
+
+    return {
+        "total_candidates": len(evaluated),
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
+        "mean_consensus_score": mean_consensus_score,
+        "accepted_paths": accepted,
+        "rejected_paths": rejected,
+        "snapshot": {
+            "snapshot_id": snapshot_id,
+            "sha256": sha256,
+        }
+        if (snapshot_id or sha256)
+        else None,
+    }
+
+
+def compute_consensus_rank_stability_v02(
+    candidates: list[dict[str, Any]],
+    context_subsets: list[list[dict[str, Any]]],
+    baseline_contexts: list[dict[str, Any]] | None = None,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    full_contexts = baseline_contexts if baseline_contexts is not None else [
+        ctx for subset in context_subsets for ctx in subset
+    ]
+    base_rows = rank_paths_by_consensus_v02(
+        candidates=candidates,
+        context_candidates=full_contexts,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    base_by_id = {str(r.get("path_id", "")): int(r.get("rank", 0)) for r in base_rows if r.get("path_id")}
+
+    subset_rank_maps: list[dict[str, int]] = []
+    for subset in context_subsets:
+        ranked_sub = rank_paths_by_consensus_v02(
+            candidates=candidates,
+            context_candidates=subset,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            weights=weights,
+        )
+        subset_rank_maps.append(
+            {str(r.get("path_id", "")): int(r.get("rank", 0)) for r in ranked_sub if r.get("path_id")}
+        )
+
+    n_subsets = len(subset_rank_maps)
+    results: list[dict[str, Any]] = []
+    for pid in sorted(base_by_id.keys()):
+        b_rank = base_by_id[pid]
+        unchanged = 0
+        shifts: list[int] = []
+        for s_map in subset_rank_maps:
+            s_rank = int(s_map.get(pid, b_rank))
+            if s_rank == b_rank:
+                unchanged += 1
+            shifts.append(abs(s_rank - b_rank))
+
+        retention = round(unchanged / n_subsets, 4) if n_subsets > 0 else 1.0
+        max_shift = max(shifts) if shifts else 0
+        results.append(
+            {
+                "path_id": pid,
+                "baseline_rank": b_rank,
+                "subsets_evaluated": n_subsets,
+                "unchanged_rank_count": unchanged,
+                "consensus_retention_rate": retention,
+                "max_rank_shift": max_shift,
+            }
+        )
+
+    results.sort(
+        key=lambda item: (
+            -float(item["consensus_retention_rate"]),
+            int(item["max_rank_shift"]),
+            str(item["path_id"]),
+        )
+    )
+    return results
+
+
 def filter_consensus_by_thresholds_v02(
     consensus_rows: list[dict[str, Any]],
     min_mean_net_score: float | None = None,

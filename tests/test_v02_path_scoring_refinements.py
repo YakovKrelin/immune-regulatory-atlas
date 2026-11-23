@@ -6,6 +6,7 @@ from bioos.engine.path_ranking import (
     attribute_path_evidence_v02,
     audit_context_score_shifts_v02,
     audit_path_rank_shifts_v02,
+    build_consensus_report_v02,
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
     calibrate_conflict_adjusted_confidence_v02,
@@ -13,6 +14,7 @@ from bioos.engine.path_ranking import (
     compare_context_rankings_v02,
     compare_path_scores_v02,
     compute_conflict_aware_confidence_dispersion_v02,
+    compute_consensus_rank_stability_v02,
     compute_context_coverage_dispersion_v02,
     compute_context_edge_support_density_v02,
     compute_context_field_coverage_v02,
@@ -133,6 +135,45 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert margins[1]["margin_class"] == "tail"
 
 
+def test_consensus_report_and_subset_rank_stability():
+    p_blood = {
+        "path_id": "P_BLOOD",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    p_liver = {
+        "path_id": "P_LIVER",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Liver"}}],
+    }
+    ctx_blood = {"context_id": "C1", "context": {"tissue": "Blood"}}
+    ctx_liver = {"context_id": "C2", "context": {"tissue": "Liver"}}
+
+    consensus = rank_paths_by_consensus_v02(
+        candidates=[p_blood, p_liver],
+        context_candidates=[ctx_blood, ctx_liver],
+    )
+    report = build_consensus_report_v02(
+        consensus_rows=consensus,
+        min_mean_net_score=1.0,
+        snapshot_id="snap_v02",
+        sha256="deadbeef",
+    )
+    assert report["total_candidates"] == 2
+    assert report["accepted_count"] == 2
+    assert report["rejected_count"] == 0
+    assert report["snapshot"] == {"snapshot_id": "snap_v02", "sha256": "deadbeef"}
+
+    stability = compute_consensus_rank_stability_v02(
+        candidates=[p_blood, p_liver],
+        context_subsets=[[ctx_blood], [ctx_liver]],
+        baseline_contexts=[ctx_blood, ctx_liver],
+    )
+    assert len(stability) == 2
+    for row in stability:
+        assert row["subsets_evaluated"] == 2
+        assert 0.0 <= row["consensus_retention_rate"] <= 1.0
+        assert row["max_rank_shift"] >= 0
+
+
 def test_consensus_threshold_filtering_and_conflict_aware_dispersion():
     p_clean = {
         "path_id": "P_CLEAN",
@@ -246,11 +287,11 @@ def test_evidence_coverage_and_conflict_penalized_consensus_ranking():
 
     p_clean = {
         "path_id": "P_CLEAN",
-        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
     }
     p_conflicted = {
         "path_id": "P_CONFLICTED",
-        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Blood"}}],
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
     }
     pen_ranked = rank_consensus_with_conflict_penalty_v02(
         candidates=[p_conflicted, p_clean],
