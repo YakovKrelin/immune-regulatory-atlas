@@ -546,6 +546,75 @@ def select_top_paths_v02(
     return sliced
 
 
+def evaluate_weight_sensitivity_v02(
+    candidates: list[dict[str, Any]],
+    weight_variants: dict[str, PathScoringWeights],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    target_context: dict[str, Any] | None = None,
+    base_weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, list[dict[str, Any]]]:
+    results: dict[str, list[dict[str, Any]]] = {
+        "baseline": rank_paths_with_context_v02(
+            candidates=candidates,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=target_context,
+            weights=base_weights,
+        )
+    }
+    for variant_name in sorted(weight_variants.keys()):
+        results[variant_name] = rank_paths_with_context_v02(
+            candidates=candidates,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=target_context,
+            weights=weight_variants[variant_name],
+        )
+    return results
+
+
+def audit_path_rank_shifts_v02(
+    baseline_ranked: list[dict[str, Any]],
+    perturbed_ranked: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    base_by_id = {str(r.get("path_id", "")): r for r in baseline_ranked if r.get("path_id")}
+    pert_by_id = {str(r.get("path_id", "")): r for r in perturbed_ranked if r.get("path_id")}
+    all_ids = sorted(set(base_by_id.keys()) | set(pert_by_id.keys()))
+
+    audit_rows: list[dict[str, Any]] = []
+    for pid in all_ids:
+        b = base_by_id.get(pid)
+        p = pert_by_id.get(pid)
+        b_rank = int(b["rank"]) if b and "rank" in b else None
+        p_rank = int(p["rank"]) if p and "rank" in p else None
+        rank_delta = (b_rank - p_rank) if (b_rank is not None and p_rank is not None) else None
+        b_score = float(b.get("net_score", 0.0)) if b else 0.0
+        p_score = float(p.get("net_score", 0.0)) if p else 0.0
+
+        audit_rows.append(
+            {
+                "path_id": pid,
+                "baseline_rank": b_rank,
+                "perturbed_rank": p_rank,
+                "rank_delta": rank_delta,
+                "rank_changed": b_rank != p_rank,
+                "delta_net_score": round(p_score - b_score, 4),
+            }
+        )
+
+    audit_rows.sort(
+        key=lambda row: (
+            row["perturbed_rank"] if row["perturbed_rank"] is not None else 999999,
+            str(row["path_id"]),
+        )
+    )
+    return audit_rows
+
+
 def summarize_ranked_paths_v02(
     ranked_paths: list[dict[str, Any]],
 ) -> dict[str, Any]:

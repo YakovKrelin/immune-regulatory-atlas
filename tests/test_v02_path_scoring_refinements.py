@@ -1,7 +1,10 @@
 from bioos.engine.path_ranking import (
+    PathScoringWeights,
     attach_snapshot_provenance,
+    audit_path_rank_shifts_v02,
     build_ranked_hypothesis_payload_v02,
     compare_path_scores_v02,
+    evaluate_weight_sensitivity_v02,
     filter_and_rank_paths_v02,
     group_ranked_paths_by_context_v02,
     rank_contexts_for_path_v02,
@@ -169,6 +172,27 @@ def test_filter_and_rank_paths_v02():
     )
     assert [r["path_id"] for r in surviving] == ["P_CLEAN"]
     assert surviving[0]["rank"] == 1
+
+
+def test_weight_sensitivity_and_rank_shifts():
+    p_ctx = {
+        "path_id": "P_CTX",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    p_plain = {
+        "path_id": "P_PLAIN",
+        "edges": [{"id": "E2", "subject": "A", "object": "B", "conflict": False, "context": {"tissue": "Liver"}}],
+    }
+    variants = evaluate_weight_sensitivity_v02(
+        candidates=[p_plain, p_ctx],
+        weight_variants={"heavy_ctx": PathScoringWeights(context_match_bonus=1.0, context_coverage_bonus=1.5)},
+        target_context={"tissue": "Blood"},
+    )
+    assert "baseline" in variants and "heavy_ctx" in variants
+    shifts = audit_path_rank_shifts_v02(variants["baseline"], variants["heavy_ctx"])
+    by_id = {row["path_id"]: row for row in shifts}
+    assert by_id["P_CTX"]["perturbed_rank"] == 1
+    assert by_id["P_CTX"]["delta_net_score"] > 0.0
 
 
 def test_top_k_selection_and_summary():
