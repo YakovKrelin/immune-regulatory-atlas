@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
 
@@ -325,6 +325,44 @@ def rank_paths_with_context_v02(
     return scored
 
 
+def filter_and_rank_paths_v02(
+    candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    target_context: dict[str, Any] | None = None,
+    max_conflicts: int | None = None,
+    max_counter_hits: int | None = None,
+    min_normalized_confidence: float = 0.0,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    ranked = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=target_context,
+        weights=weights,
+    )
+    filtered: list[dict[str, Any]] = []
+    for row in ranked:
+        conflicts = int(row.get("conflict_count", 0))
+        counter_hits = len(row.get("matched_counter_markers") or [])
+        confidence = float(row.get("normalized_confidence", 0.0))
+
+        if max_conflicts is not None and conflicts > max_conflicts:
+            continue
+        if max_counter_hits is not None and counter_hits > max_counter_hits:
+            continue
+        if confidence < float(min_normalized_confidence):
+            continue
+        filtered.append(dict(row))
+
+    for rank_idx, row in enumerate(filtered, start=1):
+        row["rank"] = rank_idx
+    return filtered
+
+
 def rank_contexts_for_path_v02(
     path_id: str,
     edges: list[dict[str, Any]],
@@ -417,6 +455,31 @@ def rank_paths_across_contexts_v02(
     for rank_idx, row in enumerate(combined, start=1):
         row["rank"] = rank_idx
     return combined
+
+
+def group_ranked_paths_by_context_v02(
+    ranked_rows: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in ranked_rows:
+        ctx_id = str(row.get("context_id") or "default_context")
+        grouped[ctx_id].append(dict(row))
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for ctx_id in sorted(grouped.keys()):
+        items = grouped[ctx_id]
+        items.sort(
+            key=lambda item: (
+                -float(item.get("net_score", 0.0)),
+                int(item.get("conflict_count", 0)),
+                len(item.get("matched_counter_markers") or []),
+                str(item.get("path_id", "")),
+            )
+        )
+        for idx, item in enumerate(items, start=1):
+            item["context_rank"] = idx
+        result[ctx_id] = items
+    return result
 
 
 def select_top_paths_v02(
