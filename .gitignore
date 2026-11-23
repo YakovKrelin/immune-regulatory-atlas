@@ -6,3 +6,4 @@ __pycache__/
 build/
 dist/
 scripts/latest_bioos_snapshot.json
+audit_v02.ps1
