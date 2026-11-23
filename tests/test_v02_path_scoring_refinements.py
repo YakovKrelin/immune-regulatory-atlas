@@ -18,10 +18,12 @@ from bioos.engine.path_ranking import (
     gate_paths_by_required_context_v02,
     group_ranked_paths_by_context_v02,
     partition_paths_by_confidence_tier_v02,
+    profile_context_field_sensitivity_v02,
     rank_contexts_for_path_v02,
     rank_differential_contexts_v02,
     rank_paths_across_contexts_v02,
     rank_paths_by_consensus_v02,
+    rank_paths_by_context_weighted_consensus_v02,
     rank_paths_by_weighted_context_v02,
     rank_paths_with_context_v02,
     score_candidate_path_v02,
@@ -80,7 +82,7 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert margins[1]["margin_class"] == "tail"
 
 
-def test_context_field_coverage_and_conflict_tradeoff():
+def test_context_field_coverage_sensitivity_and_conflict_tradeoff():
     edges = [
         {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
         {"id": "E2", "subject": "IL6", "object": "STAT3", "conflict": True, "context": {"tissue": "Blood", "cell_type": "T Cell"}},
@@ -93,6 +95,15 @@ def test_context_field_coverage_and_conflict_tradeoff():
     assert field_cov["field_match_counts"] == {"tissue": 2, "cell_type": 1}
     assert field_cov["field_match_ratios"] == {"tissue": 1.0, "cell_type": 0.5}
     assert field_cov["fully_matched_fields"] == ["tissue"]
+
+    sensitivity = profile_context_field_sensitivity_v02(
+        path_id="P_SENS",
+        edges=edges,
+        target_context={"tissue": "Blood", "cell_type": "Macrophage"},
+    )
+    assert [row["field"] for row in sensitivity] == ["tissue", "cell_type"]
+    assert sensitivity[0]["score_drop"] > sensitivity[1]["score_drop"]
+    assert round(sum(row["relative_contribution"] for row in sensitivity), 4) > 0.0
 
     tradeoff = score_conflict_context_tradeoff_v02(
         path_id="P_TRADE",
@@ -242,6 +253,19 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     )
     assert weighted[0]["path_id"] == "P_CLEAN"
     assert weighted[0]["weighted_mean_net_score"] > weighted[1]["weighted_mean_net_score"]
+
+    weighted_consensus = rank_paths_by_context_weighted_consensus_v02(
+        candidates=[path_counter, path_clean],
+        context_candidates=[
+            {"context_id": "CTX_BLOOD", "context": {"tissue": "Blood"}},
+            {"context_id": "CTX_LIVER", "context": {"tissue": "Liver"}},
+        ],
+        context_weights={"CTX_BLOOD": 3.0, "CTX_LIVER": 1.0},
+        counter_markers=["IL10"],
+    )
+    assert weighted_consensus[0]["path_id"] == "P_CLEAN"
+    assert weighted_consensus[0]["matched_context_count"] == 1
+    assert weighted_consensus[0]["weighted_mean_score"] > weighted_consensus[1]["weighted_mean_score"]
 
     grouped = group_ranked_paths_by_context_v02(ranked)
     assert sorted(grouped.keys()) == ["CTX_BLOOD", "CTX_LIVER"]

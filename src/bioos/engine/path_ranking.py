@@ -291,6 +291,61 @@ def compute_context_field_coverage_v02(
     }
 
 
+def profile_context_field_sensitivity_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any] | None,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    ctx = {k: v for k, v in (target_context or {}).items() if _norm_str(v)}
+    if not ctx:
+        return []
+
+    baseline = score_candidate_path_v02(
+        path_id=path_id,
+        edges=edges,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=ctx,
+        weights=weights,
+    )
+    base_net = float(baseline.get("net_score", 0.0))
+    base_ctx_bonus = float(baseline.get("context_bonus", 0.0))
+
+    rows: list[dict[str, Any]] = []
+    for field in sorted(ctx.keys()):
+        ablated_ctx = {k: v for k, v in ctx.items() if k != field}
+        ablated = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=ablated_ctx,
+            weights=weights,
+        )
+        ablated_net = float(ablated.get("net_score", 0.0))
+        score_drop = round(base_net - ablated_net, 4)
+        rel_contrib = round(score_drop / base_ctx_bonus, 4) if base_ctx_bonus > 0.0 else 0.0
+        rows.append(
+            {
+                "path_id": path_id,
+                "field": str(field),
+                "baseline_net_score": round(base_net, 4),
+                "ablated_net_score": round(ablated_net, 4),
+                "score_drop": score_drop,
+                "relative_contribution": rel_contrib,
+            }
+        )
+
+    rows.sort(key=lambda item: (-float(item["score_drop"]), str(item["field"])))
+    return rows
+
+
 def score_conflict_context_tradeoff_v02(
     path_id: str,
     edges: list[dict[str, Any]],
@@ -1065,6 +1120,89 @@ def rank_paths_by_weighted_context_v02(
     for idx, item in enumerate(weighted_rows, start=1):
         item["rank"] = idx
     return weighted_rows
+
+
+def rank_paths_by_context_weighted_consensus_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    context_weights: dict[str, float] | None = None,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    ctx_w_map = {str(k): float(v) for k, v in (context_weights or {}).items()}
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+
+    weight_lookup: dict[str, float] = {}
+    for idx, ctx_item in enumerate(context_candidates):
+        cid = str(ctx_item.get("context_id") or f"ctx_{idx}")
+        if cid in ctx_w_map:
+            weight_lookup[cid] = max(0.0, float(ctx_w_map[cid]))
+        elif isinstance(ctx_item.get("weight"), (int, float)):
+            weight_lookup[cid] = max(0.0, float(ctx_item["weight"]))
+        else:
+            weight_lookup[cid] = 1.0
+
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        pid = str(row.get("path_id", ""))
+        if pid:
+            by_path[pid].append(row)
+
+    consensus_rows: list[dict[str, Any]] = []
+    for path_id, items in by_path.items():
+        w_score_sum = 0.0
+        w_conf_sum = 0.0
+        w_total = 0.0
+        matched_ctx_count = 0
+        zero_conflict = 0
+        total_counter_hits = 0
+
+        for item in items:
+            cid = str(item.get("context_id", ""))
+            cw = weight_lookup.get(cid, 1.0)
+            w_score_sum += float(item.get("net_score", 0.0)) * cw
+            w_conf_sum += float(item.get("normalized_confidence", 0.0)) * cw
+            w_total += cw
+            if float(item.get("context_coverage", 0.0)) > 0.0:
+                matched_ctx_count += 1
+            if int(item.get("conflict_count", 0)) == 0:
+                zero_conflict += 1
+            total_counter_hits += len(item.get("matched_counter_markers") or [])
+
+        denom = w_total if w_total > 0.0 else float(max(1, len(items)))
+        consensus_rows.append(
+            {
+                "path_id": path_id,
+                "contexts_evaluated": len(items),
+                "matched_context_count": matched_ctx_count,
+                "zero_conflict_contexts": zero_conflict,
+                "total_counter_hits": total_counter_hits,
+                "weighted_mean_score": round(w_score_sum / denom, 4),
+                "weighted_mean_confidence": round(w_conf_sum / denom, 4),
+            }
+        )
+
+    consensus_rows.sort(
+        key=lambda item: (
+            -float(item["weighted_mean_score"]),
+            -float(item["weighted_mean_confidence"]),
+            -int(item["zero_conflict_contexts"]),
+            int(item["total_counter_hits"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(consensus_rows, start=1):
+        item["rank"] = idx
+    return consensus_rows
 
 
 def summarize_context_breadth_v02(
