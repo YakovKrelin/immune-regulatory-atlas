@@ -19,10 +19,12 @@ from bioos.engine.path_ranking import (
     rank_differential_contexts_v02,
     rank_paths_across_contexts_v02,
     rank_paths_by_consensus_v02,
+    rank_paths_by_weighted_context_v02,
     rank_paths_with_context_v02,
     score_candidate_path_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
+    summarize_context_breadth_v02,
     summarize_ranked_paths_v02,
 )
 
@@ -170,6 +172,11 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     assert ranked[0]["context_id"] == "CTX_BLOOD"
     assert ranked[0]["rank"] == 1
 
+    breadth = summarize_context_breadth_v02(ranked)
+    by_pid = {b["path_id"]: b for b in breadth}
+    assert by_pid["P_CLEAN"]["contexts_matched"] == 1
+    assert by_pid["P_CLEAN"]["matched_context_ids"] == ["CTX_BLOOD"]
+
     consensus = rank_paths_by_consensus_v02(
         candidates=[path_counter, path_clean],
         context_candidates=[
@@ -181,6 +188,18 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     assert consensus[0]["path_id"] == "P_CLEAN"
     assert consensus[0]["contexts_evaluated"] == 2
     assert consensus[0]["rank"] == 1
+
+    weighted = rank_paths_by_weighted_context_v02(
+        candidates=[path_counter, path_clean],
+        context_candidates=[
+            {"context_id": "CTX_BLOOD", "context": {"tissue": "Blood"}},
+            {"context_id": "CTX_LIVER", "context": {"tissue": "Liver"}},
+        ],
+        context_weights={"CTX_BLOOD": 3.0, "CTX_LIVER": 1.0},
+        counter_markers=["IL10"],
+    )
+    assert weighted[0]["path_id"] == "P_CLEAN"
+    assert weighted[0]["weighted_mean_net_score"] > weighted[1]["weighted_mean_net_score"]
 
     grouped = group_ranked_paths_by_context_v02(ranked)
     assert sorted(grouped.keys()) == ["CTX_BLOOD", "CTX_LIVER"]

@@ -837,6 +837,119 @@ def rank_paths_by_consensus_v02(
     return consensus_rows
 
 
+def rank_paths_by_weighted_context_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    context_weights: dict[str, float] | None = None,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    ctx_w_map = {str(k): float(v) for k, v in (context_weights or {}).items()}
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+
+    candidate_weight_lookup: dict[str, float] = {}
+    for idx, ctx_item in enumerate(context_candidates):
+        cid = str(ctx_item.get("context_id") or f"ctx_{idx}")
+        if cid in ctx_w_map:
+            candidate_weight_lookup[cid] = max(0.0, float(ctx_w_map[cid]))
+        elif isinstance(ctx_item.get("weight"), (int, float)):
+            candidate_weight_lookup[cid] = max(0.0, float(ctx_item["weight"]))
+        else:
+            candidate_weight_lookup[cid] = 1.0
+
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_path[str(row.get("path_id", ""))].append(row)
+
+    weighted_rows: list[dict[str, Any]] = []
+    for path_id, items in by_path.items():
+        n_ctx = len(items)
+        scores = [float(i.get("net_score", 0.0)) for i in items]
+        w_sum = 0.0
+        w_total = 0.0
+        for item in items:
+            cid = str(item.get("context_id", ""))
+            cw = candidate_weight_lookup.get(cid, 1.0)
+            w_sum += float(item.get("net_score", 0.0)) * cw
+            w_total += cw
+
+        weighted_mean = round(w_sum / w_total, 4) if w_total > 0.0 else round(sum(scores) / max(1, n_ctx), 4)
+        zero_conflict = sum(1 for i in items if int(i.get("conflict_count", 0)) == 0)
+        total_counter_hits = sum(len(i.get("matched_counter_markers") or []) for i in items)
+
+        weighted_rows.append(
+            {
+                "path_id": path_id,
+                "contexts_evaluated": n_ctx,
+                "zero_conflict_contexts": zero_conflict,
+                "total_counter_hits": total_counter_hits,
+                "mean_net_score": round(sum(scores) / max(1, n_ctx), 4),
+                "weighted_mean_net_score": weighted_mean,
+            }
+        )
+
+    weighted_rows.sort(
+        key=lambda item: (
+            -float(item["weighted_mean_net_score"]),
+            -int(item["zero_conflict_contexts"]),
+            int(item["total_counter_hits"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(weighted_rows, start=1):
+        item["rank"] = idx
+    return weighted_rows
+
+
+def summarize_context_breadth_v02(
+    across_context_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in across_context_rows:
+        pid = str(row.get("path_id", ""))
+        if pid:
+            by_path[pid].append(row)
+
+    breadth_rows: list[dict[str, Any]] = []
+    for pid in sorted(by_path.keys()):
+        items = by_path[pid]
+        evaluated = len(items)
+        matched_ids = sorted(
+            str(item.get("context_id", ""))
+            for item in items
+            if float(item.get("context_coverage", 0.0)) > 0.0 and item.get("context_id")
+        )
+        matched_count = len(matched_ids)
+        ratio = round(matched_count / evaluated, 4) if evaluated > 0 else 0.0
+        breadth_rows.append(
+            {
+                "path_id": pid,
+                "contexts_evaluated": evaluated,
+                "contexts_matched": matched_count,
+                "context_breadth_ratio": ratio,
+                "matched_context_ids": matched_ids,
+            }
+        )
+
+    breadth_rows.sort(
+        key=lambda item: (
+            -float(item["context_breadth_ratio"]),
+            -int(item["contexts_matched"]),
+            str(item["path_id"]),
+        )
+    )
+    return breadth_rows
+
+
 def group_ranked_paths_by_context_v02(
     ranked_rows: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
