@@ -42,6 +42,7 @@ from bioos.engine.path_ranking import (
     rank_consensus_by_confidence_v02,
     rank_consensus_by_conflict_aware_confidence_v02,
     rank_consensus_by_score_stability_v02,
+    rank_consensus_by_stability_confidence_v02,
     rank_consensus_by_stability_v02,
     rank_consensus_with_conflict_penalty_v02,
     rank_contexts_for_path_v02,
@@ -58,6 +59,7 @@ from bioos.engine.path_ranking import (
     select_top_consensus_paths_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
+    summarize_consensus_stability_v02,
     summarize_context_breadth_v02,
     summarize_ranked_paths_v02,
 )
@@ -139,6 +141,31 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_consensus_stability_confidence_ranking_and_summary():
+    consensus_rows = [
+        {"path_id": "P_UNSTABLE_CONF", "mean_net_score": 2.0, "mean_normalized_confidence": 0.9},
+        {"path_id": "P_STABLE_CONF", "mean_net_score": 1.6, "mean_normalized_confidence": 0.75},
+    ]
+    stability_rows = [
+        {"path_id": "P_UNSTABLE_CONF", "consensus_retention_rate": 0.25, "max_rank_shift": 2},
+        {"path_id": "P_STABLE_CONF", "consensus_retention_rate": 1.0, "max_rank_shift": 0},
+    ]
+
+    ranked = rank_consensus_by_stability_confidence_v02(consensus_rows, stability_rows)
+    assert [r["path_id"] for r in ranked] == ["P_STABLE_CONF", "P_UNSTABLE_CONF"]
+    assert ranked[0]["stability_adjusted_confidence"] == 0.75
+    assert ranked[1]["stability_adjusted_confidence"] == 0.225
+    assert ranked[0]["rank"] == 1
+
+    summary = summarize_consensus_stability_v02(stability_rows)
+    assert summary["candidate_count"] == 2
+    assert summary["min_retention_rate"] == 0.25
+    assert summary["max_retention_rate"] == 1.0
+    assert summary["retention_spread"] == 0.75
+    assert summary["max_observed_rank_shift"] == 2
+    assert summary["full_retention_count"] == 1
 
 
 def test_consensus_stability_filtering_and_ranking():

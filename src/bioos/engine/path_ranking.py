@@ -256,6 +256,77 @@ def score_candidate_path_v02(
     }
 
 
+def rank_consensus_by_stability_confidence_v02(
+    consensus_rows: list[dict[str, Any]],
+    stability_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    stab_by_id = {
+        str(item.get("path_id", "")): item
+        for item in stability_rows
+        if item.get("path_id")
+    }
+    ranked: list[dict[str, Any]] = []
+    for row in consensus_rows:
+        pid = str(row.get("path_id", ""))
+        s_item = stab_by_id.get(pid, {})
+        retention = float(s_item.get("consensus_retention_rate", 1.0))
+        shift = int(s_item.get("max_rank_shift", 0))
+        mean_conf = float(row.get("mean_normalized_confidence", 0.0))
+        mean_score = float(row.get("mean_net_score", 0.0))
+        stab_conf = _clamp01(mean_conf * retention)
+
+        entry = dict(row)
+        entry["consensus_retention_rate"] = round(retention, 4)
+        entry["max_rank_shift"] = shift
+        entry["stability_adjusted_confidence"] = stab_conf
+        ranked.append(entry)
+
+    ranked.sort(
+        key=lambda item: (
+            -float(item["stability_adjusted_confidence"]),
+            -float(item.get("mean_normalized_confidence", 0.0)),
+            -float(item.get("mean_net_score", 0.0)),
+            str(item.get("path_id", "")),
+        )
+    )
+    for idx, item in enumerate(ranked, start=1):
+        item["rank"] = idx
+    return ranked
+
+
+def summarize_consensus_stability_v02(
+    stability_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not stability_rows:
+        return {
+            "candidate_count": 0,
+            "mean_retention_rate": 0.0,
+            "min_retention_rate": 0.0,
+            "max_retention_rate": 0.0,
+            "retention_spread": 0.0,
+            "mean_max_rank_shift": 0.0,
+            "max_observed_rank_shift": 0,
+            "full_retention_count": 0,
+        }
+
+    retentions = [float(r.get("consensus_retention_rate", 0.0)) for r in stability_rows]
+    shifts = [int(r.get("max_rank_shift", 0)) for r in stability_rows]
+    n = len(stability_rows)
+    min_ret = round(min(retentions), 4)
+    max_ret = round(max(retentions), 4)
+
+    return {
+        "candidate_count": n,
+        "mean_retention_rate": round(sum(retentions) / n, 4),
+        "min_retention_rate": min_ret,
+        "max_retention_rate": max_ret,
+        "retention_spread": round(max_ret - min_ret, 4),
+        "mean_max_rank_shift": round(sum(shifts) / n, 4),
+        "max_observed_rank_shift": max(shifts),
+        "full_retention_count": sum(1 for val in retentions if val >= 1.0),
+    }
+
+
 def filter_consensus_by_stability_v02(
     consensus_rows: list[dict[str, Any]],
     stability_rows: list[dict[str, Any]],
