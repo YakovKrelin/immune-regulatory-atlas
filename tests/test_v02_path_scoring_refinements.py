@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 
 from bioos.engine.path_ranking import (
     PathScoringWeights,
@@ -1186,3 +1186,49 @@ def test_snapshot_provenance_envelope():
     payload = build_ranked_hypothesis_payload_v02(sample, snapshot_id="snap_01", sha256="abc123")
     assert payload["summary"]["count"] == 1
     assert payload["snapshot"]["snapshot_id"] == "snap_01"
+
+
+def test_context_alignment_and_counter_sign_weighting_v02():
+    from bioos.engine.path_ranking import rank_paths_by_context_and_counter_sign_v02, summarize_context_counter_sign_cohort_v02
+    aligned_clean = {
+        "path_id": "P_ALIGNED_CLEAN",
+        "edges": [
+            {"id": "E1", "subject": "TNF", "object": "IL6", "sign": "+", "context": {"tissue": "Blood"}},
+            {"id": "E2", "subject": "IL6", "object": "STAT3", "sign": "+", "context": {"tissue": "Blood"}},
+        ],
+    }
+    counter_sign_path = {
+        "path_id": "P_COUNTER_SIGN",
+        "edges": [
+            {"id": "E3", "subject": "TNF", "object": "IL6", "sign": "+", "context": {"tissue": "Blood"}},
+            {"id": "E4", "subject": "IL6", "object": "STAT3", "sign": "-", "context": {"tissue": "Blood"}},
+        ],
+    }
+    mismatched_path = {
+        "path_id": "P_MISMATCHED",
+        "edges": [
+            {"id": "E5", "subject": "TNF", "object": "IL6", "sign": "+", "context": {"tissue": "Liver"}},
+        ],
+    }
+
+    ranked = rank_paths_by_context_and_counter_sign_v02(
+        candidates=[counter_sign_path, mismatched_path, aligned_clean],
+        target_context={"tissue": "Blood"},
+        expected_sign="+",
+    )
+
+    assert [r["path_id"] for r in ranked] == [
+        "P_ALIGNED_CLEAN",
+        "P_COUNTER_SIGN",
+        "P_MISMATCHED",
+    ]
+    assert [r["rank"] for r in ranked] == [1, 2, 3]
+    assert ranked[0]["context_alignment_score"] == 1.0
+    assert ranked[0]["counter_sign_count"] == 0
+    assert ranked[1]["counter_sign_count"] == 1
+    assert ranked[1]["adjusted_net_score"] < ranked[1]["base_net_score"]
+
+    summary = summarize_context_counter_sign_cohort_v02(ranked)
+    assert summary["candidate_count"] == 3
+    assert summary["total_counter_sign_edges"] == 1
+    assert summary["counter_sign_free_count"] == 2

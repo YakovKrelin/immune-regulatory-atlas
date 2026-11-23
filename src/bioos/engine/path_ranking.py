@@ -3295,3 +3295,196 @@ def build_ranked_hypothesis_payload_v02(
     )
     envelope["summary"] = summarize_ranked_paths_v02(ranked_paths)
     return envelope
+
+
+def compute_path_context_alignment_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ctx = target_context or {}
+    context_fields = ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco")
+    requested = {
+        field: _norm_str(ctx.get(field))
+        for field in context_fields
+        if _norm_str(ctx.get(field))
+    }
+
+    edge_count = len(edges)
+    if edge_count == 0:
+        return {
+            "path_id": path_id,
+            "edge_count": 0,
+            "requested_field_count": len(requested),
+            "aligned_edge_count": 0,
+            "context_alignment_score": 0.0,
+            "matched_fields": [],
+        }
+
+    aligned_edges = 0
+    matched_fields: set[str] = set()
+    for edge in edges:
+        edge_ctx = edge.get("context") if isinstance(edge.get("context"), dict) else edge
+        edge_matched = False
+        for field, expected in requested.items():
+            if _norm_str(edge_ctx.get(field)) == expected:
+                edge_matched = True
+                matched_fields.add(field)
+        if edge_matched:
+            aligned_edges += 1
+
+    if requested:
+        alignment_score = _clamp01(aligned_edges / edge_count)
+    else:
+        alignment_score = 0.5
+
+    return {
+        "path_id": path_id,
+        "edge_count": edge_count,
+        "requested_field_count": len(requested),
+        "aligned_edge_count": aligned_edges,
+        "context_alignment_score": alignment_score,
+        "matched_fields": sorted(matched_fields),
+    }
+
+
+def score_counter_sign_conflict_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    expected_sign: Any = None,
+    counter_sign_penalty_weight: float = 0.35,
+) -> dict[str, Any]:
+    signs: list[int] = []
+    explicit_counter_edges = 0
+
+    for edge in edges:
+        if bool(edge.get("counter_sign")) or bool(edge.get("is_counter_sign")):
+            explicit_counter_edges += 1
+        s_val = _norm_sign(edge.get("sign") or edge.get("direction") or edge.get("polarity"))
+        if s_val != 0:
+            signs.append(s_val)
+
+    exp_val = _norm_sign(expected_sign) if expected_sign is not None else 0
+    if exp_val == 0 and signs:
+        pos_cnt = sum(1 for s in signs if s > 0)
+        neg_cnt = sum(1 for s in signs if s < 0)
+        if pos_cnt > neg_cnt:
+            exp_val = 1
+        elif neg_cnt > pos_cnt:
+            exp_val = -1
+
+    opposing_sign_edges = 0
+    if exp_val != 0:
+        opposing_sign_edges = sum(1 for s in signs if s != 0 and s != exp_val)
+
+    counter_sign_count = max(explicit_counter_edges, opposing_sign_edges)
+    edge_count = len(edges)
+    counter_sign_ratio = round(counter_sign_count / max(1, edge_count), 4) if edge_count > 0 else 0.0
+    penalty = round(counter_sign_count * max(0.0, float(counter_sign_penalty_weight)), 4)
+    coherence = _clamp01(1.0 - counter_sign_ratio)
+
+    return {
+        "path_id": path_id,
+        "edge_count": edge_count,
+        "expected_sign": exp_val,
+        "counter_sign_count": counter_sign_count,
+        "counter_sign_ratio": counter_sign_ratio,
+        "sign_coherence_score": coherence,
+        "counter_sign_penalty": penalty,
+    }
+
+
+def rank_paths_by_context_and_counter_sign_v02(
+    candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    target_context: dict[str, Any] | None = None,
+    expected_sign: Any = None,
+    context_alignment_bonus: float = 0.25,
+    counter_sign_penalty_weight: float = 0.35,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    ranked: list[dict[str, Any]] = []
+    for idx, item in enumerate(candidates):
+        path_id = str(item.get("path_id") or f"path_{idx}")
+        edges = item.get("edges") if isinstance(item.get("edges"), list) else []
+
+        base = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=target_context,
+            weights=weights,
+        )
+        ctx_align = compute_path_context_alignment_v02(
+            path_id=path_id,
+            edges=edges,
+            target_context=target_context,
+        )
+        sign_conf = score_counter_sign_conflict_v02(
+            path_id=path_id,
+            edges=edges,
+            expected_sign=expected_sign,
+            counter_sign_penalty_weight=counter_sign_penalty_weight,
+        )
+
+        align_bonus = round(
+            float(ctx_align["context_alignment_score"]) * max(0.0, float(context_alignment_bonus)),
+            4,
+        )
+        adjusted_score = round(
+            float(base["net_score"]) + align_bonus - float(sign_conf["counter_sign_penalty"]),
+            4,
+        )
+
+        entry = dict(base)
+        entry["context_alignment_score"] = ctx_align["context_alignment_score"]
+        entry["context_alignment_bonus"] = align_bonus
+        entry["counter_sign_count"] = sign_conf["counter_sign_count"]
+        entry["counter_sign_ratio"] = sign_conf["counter_sign_ratio"]
+        entry["counter_sign_penalty_v02"] = sign_conf["counter_sign_penalty"]
+        entry["base_net_score"] = base["net_score"]
+        entry["adjusted_net_score"] = adjusted_score
+        ranked.append(entry)
+
+    ranked.sort(
+        key=lambda row: (
+            -float(row["adjusted_net_score"]),
+            -float(row["context_alignment_score"]),
+            int(row["counter_sign_count"]),
+            str(row["path_id"]),
+        )
+    )
+    for rank_idx, row in enumerate(ranked, start=1):
+        row["rank"] = rank_idx
+    return ranked
+
+
+def summarize_context_counter_sign_cohort_v02(
+    ranked_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not ranked_rows:
+        return {
+            "candidate_count": 0,
+            "mean_context_alignment_score": 0.0,
+            "mean_adjusted_net_score": 0.0,
+            "total_counter_sign_edges": 0,
+            "counter_sign_free_count": 0,
+        }
+
+    n = len(ranked_rows)
+    align_scores = [float(r.get("context_alignment_score", 0.0)) for r in ranked_rows]
+    adj_scores = [float(r.get("adjusted_net_score", r.get("net_score", 0.0))) for r in ranked_rows]
+    total_counter = sum(int(r.get("counter_sign_count", 0)) for r in ranked_rows)
+    clean_cnt = sum(1 for r in ranked_rows if int(r.get("counter_sign_count", 0)) == 0)
+
+    return {
+        "candidate_count": n,
+        "mean_context_alignment_score": round(sum(align_scores) / n, 4),
+        "mean_adjusted_net_score": round(sum(adj_scores) / n, 4),
+        "total_counter_sign_edges": total_counter,
+        "counter_sign_free_count": clean_cnt,
+    }
