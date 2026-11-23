@@ -1,4 +1,4 @@
-from bioos.models import Assertion
+﻿from bioos.models import Assertion
 
 
 def get_neighborhood(assertions: list[Assertion], start_node: str, max_hops: int = 2) -> dict:
@@ -28,8 +28,10 @@ def analyze_why_elevated(assertions: list[Assertion], target_entity: str) -> dic
     direct = [a for a in assertions if a.object == target_entity and a.direction == "up"]
     upstream = [a for a in assertions if any(d.subject == a.object and a.direction == "up" for d in direct)]
     return {
+        "inference_type": "observational_graph_association",
         "direct_causes": [a.model_dump() for a in direct],
         "upstream_causes": [a.model_dump() for a in upstream],
+        "caveat": "Graph paths reflect recorded assertions and context limits rather than proven in vivo causality.",
     }
 
 
@@ -37,12 +39,19 @@ def simulate_perturbation(assertions: list[Assertion], target_entity: str, actio
     trade_offs = (
         ["CRP down", "STAT3 signaling down", "Th17 differentiation down", "Potential infection-defense trade-off"]
         if target_entity == "IL6" and action == "suppress"
-        else ["Depends on cell type, dose, and exposure duration"]
+        else ["Depends on cell type, dose, concentration, and exposure duration"]
     )
     return {
+        "inference_type": "perturbation_hypothesis_not_proven_intervention_outcome",
         "target_entity": target_entity,
         "action": action,
         "resulting_direction": "down" if action == "suppress" else "up",
         "trade_offs": trade_offs,
+        "uncertainty": {
+            "data": "moderate",
+            "model": "moderate",
+            "context": "high",
+            "translational_transfer": "context_dependent",
+        },
         "disclaimer": "Graph modeling reflects known assertions and context limits; not a clinical recommendation.",
     }

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 import json
 import re
 from bioos.models import Assertion
@@ -18,7 +18,9 @@ def build_hypotheses_from_signals(signals_text: str, assertions: list[Assertion]
         if (has_ifn and has_infl)
         else f"H1: Cascade activation involving {', '.join(signals) or 'selected factors'}."
     )
+    has_conflicts = any(a.conflict for a in matched)
     return {
+        "inference_type": "hypothesis_compatibility_not_certainty",
         "signals": signals,
         "primary_hypothesis": primary,
         "alternatives": [
@@ -28,7 +30,18 @@ def build_hypotheses_from_signals(signals_text: str, assertions: list[Assertion]
             "H5: Cell-composition artifact.",
         ],
         "missing_markers": ["ISG15", "MX1", "OAS1", "IL1B", "CRP", "Cell subset fractions"],
+        "uncertainty_breakdown": {
+            "data": "moderate" if matched else "high",
+            "model": "moderate",
+            "context": "high",
+            "translational_transfer": "moderate",
+        },
         "conflicts": [a.model_dump() for a in matched if a.conflict],
+        "bifurcation_note": (
+            "Conflicting or multi-axis signals present; distinguish competing hypotheses with targeted assays and cell composition."
+            if has_conflicts or (has_ifn and has_infl)
+            else "Single-axis alignment; verify context, measurement level, and counter-markers."
+        ),
     }
 
 

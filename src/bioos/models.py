@@ -1,4 +1,4 @@
-from typing import Literal
+﻿from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +11,11 @@ class AssertionContext(BaseModel):
     stimulus: str
     timepoint: str
     method: str
+    measurement_level: str | None = None
+    phase: str | None = None
+    dose_level: str | None = None
+    duration_pattern: str | None = None
+    cell_circuit: str | None = None
 
 
 class Assertion(BaseModel):
@@ -68,6 +73,8 @@ class BiologicalState(BaseModel):
     causes: list[str]
     drivers: list[str]
     biomarkers: list[str]
+    anchor_markers: list[str] = Field(default_factory=list)
+    counter_markers: list[str] = Field(default_factory=list)
     activated_pathways: list[str]
     suppressed_pathways: list[str]
     consequences: list[str]
@@ -83,6 +90,7 @@ class ExpressionMeasurement(BaseModel):
 class DatasetUploadRequest(BaseModel):
     dataset_name: str = Field(default="uploaded_expression_set")
     modality: Literal["RNA-seq", "Proteomics", "Cytokines", "Metabolomics"] = "RNA-seq"
+    measurement_level: str | None = None
     organism: str = "Homo sapiens"
     tissue: str | None = None
     cell_type: str | None = None
@@ -94,6 +102,9 @@ class EvaluatedStateScore(BaseModel):
     name: str
     matched_drivers: list[str]
     matched_biomarkers: list[str]
+    matched_anchors: list[str] = Field(default_factory=list)
+    matched_counter_markers: list[str] = Field(default_factory=list)
+    counter_penalty: float = 0.0
     coverage_ratio: float
     diagnostic_disclaimer: str = "Not a clinical diagnosis"
 

@@ -1,4 +1,4 @@
-from bioos.models import Entity
+﻿from bioos.models import Entity
 
 ENTITIES: list[Entity] = [
     Entity(
@@ -72,5 +72,41 @@ ENTITIES: list[Entity] = [
         contexts=["Blood / PBMC"],
         pathologies=["Viral Infections", "Autoimmune Inflammation"],
         evidence_summary="Reliable interferon-response marker (ECO A-C).",
+    ),
+    Entity(
+        id="IL10",
+        bioos_id="BIOOS:E000105",
+        name="IL10",
+        full_name="Interleukin 10",
+        category="Factors",
+        sub_type="Immunoregulatory Cytokine",
+        organism="Homo sapiens",
+        description="Key immunoregulatory cytokine constraining inflammatory excess and supporting resolution.",
+        functions=["Inhibits pro-inflammatory cytokine production", "Supports resolution and regulatory programs"],
+        pathways=["IL10-STAT3 immunoregulation", "Inflammation resolution"],
+        cells=["Treg", "M2 Macrophage", "Monocyte"],
+        activators=["TLR signaling", "Resolution phase cues"],
+        inhibitors=["Sustained unopposed pro-inflammatory signaling"],
+        contexts=["Tissue resolution", "Mucosal homeostasis"],
+        pathologies=["Inflammatory Bowel Disease", "Autoimmune Conditions"],
+        evidence_summary="Well-characterized immunoregulatory mediator (ECO A-B).",
+    ),
+    Entity(
+        id="HIF1A",
+        bioos_id="BIOOS:E000106",
+        name="HIF1A",
+        full_name="Hypoxia Inducible Factor 1 Subunit Alpha",
+        category="Pathways",
+        sub_type="Transcription Factor / Hypoxia Sensor",
+        organism="Homo sapiens",
+        description="Oxygen-sensitive transcriptional regulator linking hypoxia and metabolic stress to immune responses.",
+        functions=["Drives hypoxic adaptation and glycolysis", "Modulates inflammatory and metabolic programs"],
+        pathways=["HIF-1alpha signaling", "Hypoxic adaptation"],
+        cells=["Macrophage", "Endothelial Cell", "T Cell"],
+        activators=["Hypoxia", "Lactate / metabolic stress", "LPS"],
+        inhibitors=["Normoxia / PHD-VHL degradation"],
+        contexts=["Hypoxic microenvironment", "Inflamed tissue"],
+        pathologies=["Oncology", "Ischemia / Tissue Injury"],
+        evidence_summary="Supported across mechanistic and cellular studies (ECO A-B).",
     ),
 ]
