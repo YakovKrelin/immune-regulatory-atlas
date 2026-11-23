@@ -7,3 +7,6 @@ build/
 dist/
 scripts/latest_bioos_snapshot.json
 audit_v02.ps1
+
+*.docx
+blood_snap.json
