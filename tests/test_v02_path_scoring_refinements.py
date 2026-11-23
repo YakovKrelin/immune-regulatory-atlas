@@ -33,6 +33,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    filter_consensus_by_stability_v02,
     filter_consensus_by_thresholds_v02,
     gate_paths_by_required_context_v02,
     group_ranked_paths_by_context_v02,
@@ -41,6 +42,7 @@ from bioos.engine.path_ranking import (
     rank_consensus_by_confidence_v02,
     rank_consensus_by_conflict_aware_confidence_v02,
     rank_consensus_by_score_stability_v02,
+    rank_consensus_by_stability_v02,
     rank_consensus_with_conflict_penalty_v02,
     rank_contexts_for_path_v02,
     rank_differential_contexts_v02,
@@ -137,6 +139,38 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_consensus_stability_filtering_and_ranking():
+    consensus_rows = [
+        {"path_id": "P_UNSTABLE_HIGH", "mean_net_score": 2.0, "zero_conflict_contexts": 1},
+        {"path_id": "P_STABLE_STEADY", "mean_net_score": 1.6, "zero_conflict_contexts": 2},
+    ]
+    stability_rows = [
+        {"path_id": "P_UNSTABLE_HIGH", "consensus_retention_rate": 0.25, "max_rank_shift": 2},
+        {"path_id": "P_STABLE_STEADY", "consensus_retention_rate": 1.0, "max_rank_shift": 0},
+    ]
+
+    ranked = rank_consensus_by_stability_v02(consensus_rows, stability_rows)
+    assert [r["path_id"] for r in ranked] == ["P_STABLE_STEADY", "P_UNSTABLE_HIGH"]
+    assert ranked[0]["stability_adjusted_score"] == 1.6
+    assert ranked[1]["stability_adjusted_score"] == 0.5
+    assert ranked[0]["rank"] == 1
+
+    filtered = filter_consensus_by_stability_v02(
+        consensus_rows=consensus_rows,
+        stability_rows=stability_rows,
+        min_retention_rate=0.5,
+        max_rank_shift=1,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_STABLE_STEADY"]
+    assert accepted[0]["rank"] == 1
+    assert [r["path_id"] for r in rejected] == ["P_UNSTABLE_HIGH"]
+    assert "below_min_retention_rate" in rejected[0]["rejection_reasons"]
+    assert "above_max_rank_shift" in rejected[0]["rejection_reasons"]
 
 
 def test_consensus_rank_margins_and_top_k_selection():
