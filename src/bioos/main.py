@@ -914,3 +914,35 @@ SnapshotCreateRequest.model_rebuild()
 from bioos.v0_2_router import router as v0_2_router
 
 app.include_router(v0_2_router)
+
+from typing import Any as _RankAny
+from pydantic import BaseModel as _RankBaseModel, Field as _RankField
+from bioos.engine.path_ranking import rank_paths_with_context_v02 as _rank_paths_with_context_v02
+
+
+class _CandidatePathPayload(_RankBaseModel):
+    path_id: str | None = None
+    edges: list[dict[str, _RankAny]] = _RankField(default_factory=list)
+
+
+class _RankPathsPayload(_RankBaseModel):
+    candidates: list[_CandidatePathPayload] = _RankField(default_factory=list)
+    active_markers: list[str] = _RankField(default_factory=list)
+    anchor_markers: list[str] = _RankField(default_factory=list)
+    counter_markers: list[str] = _RankField(default_factory=list)
+    target_context: dict[str, _RankAny] = _RankField(default_factory=dict)
+
+
+@app.post("/v0.2/paths/rank")
+def bioos_v02_rank_paths(payload: _RankPathsPayload) -> dict[str, _RankAny]:
+    ranked = _rank_paths_with_context_v02(
+        candidates=[c.model_dump() for c in payload.candidates],
+        active_markers=payload.active_markers,
+        anchor_markers=payload.anchor_markers,
+        counter_markers=payload.counter_markers,
+        target_context=payload.target_context,
+    )
+    return {
+        "ranked_paths": ranked,
+        "count": len(ranked),
+    }
