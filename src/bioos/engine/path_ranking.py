@@ -256,6 +256,59 @@ def score_candidate_path_v02(
     }
 
 
+def compute_context_specificity_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any],
+    background_contexts: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, Any]:
+    target_scored = score_candidate_path_v02(
+        path_id=path_id,
+        edges=edges,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=target_context,
+        weights=weights,
+    )
+    target_ctx_bonus = float(target_scored.get("context_bonus", 0.0))
+
+    bg_bonuses: list[float] = []
+    for bg_ctx in background_contexts:
+        payload = bg_ctx.get("context") if isinstance(bg_ctx.get("context"), dict) else bg_ctx
+        bg_scored = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=payload,
+            weights=weights,
+        )
+        bg_bonuses.append(float(bg_scored.get("context_bonus", 0.0)))
+
+    mean_bg = round(sum(bg_bonuses) / len(bg_bonuses), 4) if bg_bonuses else 0.0
+    specificity_delta = round(target_ctx_bonus - mean_bg, 4)
+    specificity_ratio = (
+        round(target_ctx_bonus / mean_bg, 4)
+        if mean_bg > 0.0
+        else (float(target_ctx_bonus > 0.0) if target_ctx_bonus > 0.0 else 0.0)
+    )
+
+    return {
+        "path_id": path_id,
+        "target_context_score": round(target_ctx_bonus, 4),
+        "background_contexts_evaluated": len(bg_bonuses),
+        "mean_background_score": mean_bg,
+        "specificity_delta": specificity_delta,
+        "specificity_ratio": specificity_ratio,
+    }
+
+
 def compute_path_overlap_metrics_v02(
     edges: list[dict[str, Any]],
     active_markers: list[str] | set[str] | None = None,
@@ -601,6 +654,54 @@ def rank_contexts_for_path_v02(
     for rank_idx, item in enumerate(rows, start=1):
         item["rank"] = rank_idx
     return rows
+
+
+def rank_differential_contexts_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    base_rows = rank_contexts_for_path_v02(
+        path_id=path_id,
+        edges=edges,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    if not base_rows:
+        return []
+
+    n = len(base_rows)
+    total_ctx_score = sum(float(r.get("context_score", 0.0)) for r in base_rows)
+    diff_rows: list[dict[str, Any]] = []
+    for row in base_rows:
+        cur_score = float(row.get("context_score", 0.0))
+        if n > 1:
+            mean_other = (total_ctx_score - cur_score) / (n - 1)
+        else:
+            mean_other = 0.0
+        diff_score = round(cur_score - mean_other, 4)
+        enriched = dict(row)
+        enriched["mean_other_context_score"] = round(mean_other, 4)
+        enriched["differential_score"] = diff_score
+        diff_rows.append(enriched)
+
+    diff_rows.sort(
+        key=lambda item: (
+            -float(item["differential_score"]),
+            -float(item["context_coverage"]),
+            str(item["context_id"]),
+        )
+    )
+    for idx, item in enumerate(diff_rows, start=1):
+        item["rank"] = idx
+    return diff_rows
 
 
 def rank_paths_across_contexts_v02(

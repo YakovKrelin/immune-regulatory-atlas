@@ -6,6 +6,7 @@ from bioos.engine.path_ranking import (
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
     compare_path_scores_v02,
+    compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
@@ -13,6 +14,7 @@ from bioos.engine.path_ranking import (
     group_ranked_paths_by_context_v02,
     partition_paths_by_confidence_tier_v02,
     rank_contexts_for_path_v02,
+    rank_differential_contexts_v02,
     rank_paths_across_contexts_v02,
     rank_paths_by_consensus_v02,
     rank_paths_with_context_v02,
@@ -87,6 +89,35 @@ def test_sign_consistency_and_context_ranking():
     )
     assert [c["context_id"] for c in ctx_ranked] == ["CTX_HIGH", "CTX_LOW"]
     assert [c["rank"] for c in ctx_ranked] == [1, 2]
+
+    diff_ctx = rank_differential_contexts_v02(
+        path_id="P_SIGN",
+        edges=edges,
+        context_candidates=[
+            {"context_id": "CTX_LOW", "context": {"tissue": "Liver", "cell_type": "Hepatocyte"}},
+            {"context_id": "CTX_HIGH", "context": {"tissue": "Blood"}},
+        ],
+    )
+    assert diff_ctx[0]["context_id"] == "CTX_HIGH"
+    assert diff_ctx[0]["differential_score"] > 0.0
+
+
+def test_context_specificity_against_background():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
+    ]
+    spec = compute_context_specificity_v02(
+        path_id="P_SPEC",
+        edges=edges,
+        target_context={"tissue": "Blood", "cell_type": "Macrophage"},
+        background_contexts=[
+            {"tissue": "Liver", "cell_type": "Hepatocyte"},
+            {"tissue": "Skin", "cell_type": "Keratinocyte"},
+        ],
+    )
+    assert spec["target_context_score"] > 0.0
+    assert spec["mean_background_score"] == 0.0
+    assert spec["specificity_delta"] > 0.0
 
 
 def test_active_marker_coverage_and_context_agreement():
