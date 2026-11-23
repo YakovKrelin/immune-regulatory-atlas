@@ -9,6 +9,7 @@ from bioos.engine.path_ranking import (
     build_ranked_hypothesis_payload_v02,
     classify_rank_margins_v02,
     compare_path_scores_v02,
+    compute_context_field_coverage_v02,
     compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
     evaluate_weight_sensitivity_v02,
@@ -24,6 +25,7 @@ from bioos.engine.path_ranking import (
     rank_paths_by_weighted_context_v02,
     rank_paths_with_context_v02,
     score_candidate_path_v02,
+    score_conflict_context_tradeoff_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
     summarize_context_breadth_v02,
@@ -76,6 +78,31 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_context_field_coverage_and_conflict_tradeoff():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
+        {"id": "E2", "subject": "IL6", "object": "STAT3", "conflict": True, "context": {"tissue": "Blood", "cell_type": "T Cell"}},
+    ]
+    field_cov = compute_context_field_coverage_v02(
+        edges=edges,
+        target_context={"tissue": "Blood", "cell_type": "Macrophage"},
+    )
+    assert field_cov["requested_fields"] == ["tissue", "cell_type"]
+    assert field_cov["field_match_counts"] == {"tissue": 2, "cell_type": 1}
+    assert field_cov["field_match_ratios"] == {"tissue": 1.0, "cell_type": 0.5}
+    assert field_cov["fully_matched_fields"] == ["tissue"]
+
+    tradeoff = score_conflict_context_tradeoff_v02(
+        path_id="P_TRADE",
+        edges=edges,
+        target_context={"tissue": "Blood", "cell_type": "Macrophage"},
+    )
+    assert tradeoff["conflict_count"] == 1
+    assert tradeoff["context_bonus"] > 0.0
+    assert tradeoff["conflict_penalty"] > 0.0
+    assert 0.0 <= tradeoff["tradeoff_ratio"] <= 1.0
 
 
 def test_sign_consistency_and_context_ranking():

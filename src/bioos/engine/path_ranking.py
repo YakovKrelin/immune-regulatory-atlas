@@ -256,6 +256,70 @@ def score_candidate_path_v02(
     }
 
 
+def compute_context_field_coverage_v02(
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ctx = target_context or {}
+    context_fields = ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco")
+    requested = [field for field in context_fields if _norm_str(ctx.get(field))]
+    edge_count = len(edges)
+
+    match_counts: dict[str, int] = {field: 0 for field in requested}
+    match_ratios: dict[str, float] = {field: 0.0 for field in requested}
+    fully_matched: list[str] = []
+
+    for field in requested:
+        expected = _norm_str(ctx.get(field))
+        matched_edges = 0
+        for edge in edges:
+            edge_ctx = edge.get("context") if isinstance(edge.get("context"), dict) else edge
+            if _norm_str(edge_ctx.get(field)) == expected:
+                matched_edges += 1
+        match_counts[field] = matched_edges
+        ratio = round(matched_edges / edge_count, 4) if edge_count > 0 else 0.0
+        match_ratios[field] = ratio
+        if edge_count > 0 and matched_edges == edge_count:
+            fully_matched.append(field)
+
+    return {
+        "edge_count": edge_count,
+        "requested_fields": requested,
+        "field_match_counts": match_counts,
+        "field_match_ratios": match_ratios,
+        "fully_matched_fields": sorted(fully_matched),
+    }
+
+
+def score_conflict_context_tradeoff_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, Any]:
+    scored = score_candidate_path_v02(
+        path_id=path_id,
+        edges=edges,
+        target_context=target_context,
+        weights=weights,
+    )
+    ctx_bonus = round(float(scored.get("context_bonus", 0.0)), 4)
+    conflict_pen = round(float(scored.get("conflict_penalty", 0.0)), 4)
+    tradeoff_score = round(ctx_bonus - conflict_pen, 4)
+    denom = ctx_bonus + conflict_pen
+    tradeoff_ratio = round(ctx_bonus / denom, 4) if denom > 0.0 else 0.0
+
+    return {
+        "path_id": path_id,
+        "conflict_count": int(scored.get("conflict_count", 0)),
+        "context_coverage": round(float(scored.get("context_coverage", 0.0)), 4),
+        "context_bonus": ctx_bonus,
+        "conflict_penalty": conflict_pen,
+        "tradeoff_score": tradeoff_score,
+        "tradeoff_ratio": tradeoff_ratio,
+    }
+
+
 def compute_context_specificity_v02(
     path_id: str,
     edges: list[dict[str, Any]],
