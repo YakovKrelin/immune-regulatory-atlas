@@ -1,4 +1,5 @@
 import pytest
+
 from bioos.engine.path_ranking import (
     PathScoringWeights,
     aggregate_weight_variant_consensus_v02,
@@ -34,6 +35,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    filter_consensus_by_conflict_rate_v02,
     filter_consensus_by_rank_shift_v02,
     filter_consensus_by_retention_v02,
     filter_consensus_by_stability_confidence_v02,
@@ -63,6 +65,7 @@ from bioos.engine.path_ranking import (
     select_top_consensus_paths_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
+    summarize_consensus_conflict_cohorts_v02,
     summarize_consensus_rank_shifts_v02,
     summarize_consensus_retention_cohorts_v02,
     summarize_consensus_retention_dispersion_v02,
@@ -148,6 +151,61 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_conflict_rate_filtering_and_conflict_cohorts_summary():
+    consensus_rows = [
+        {
+            "path_id": "P_PARTIAL",
+            "contexts_evaluated": 4,
+            "zero_conflict_contexts": 3,
+            "conflict_rate": 0.25,
+            "mean_net_score": 2.0,
+            "mean_normalized_confidence": 0.9,
+        },
+        {
+            "path_id": "P_CLEAN",
+            "contexts_evaluated": 4,
+            "zero_conflict_contexts": 4,
+            "conflict_rate": 0.0,
+            "mean_net_score": 1.6,
+            "mean_normalized_confidence": 0.85,
+        },
+        {
+            "path_id": "P_HIGH_CONF",
+            "contexts_evaluated": 4,
+            "zero_conflict_contexts": 0,
+            "conflict_rate": 0.75,
+            "mean_net_score": 1.2,
+            "mean_normalized_confidence": 0.5,
+        },
+    ]
+
+    filtered = filter_consensus_by_conflict_rate_v02(
+        consensus_rows=consensus_rows,
+        max_conflict_rate=0.4,
+        min_zero_conflict_contexts=3,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_CLEAN", "P_PARTIAL"]
+    assert [r["rank"] for r in accepted] == [1, 2]
+    assert [r["path_id"] for r in rejected] == ["P_HIGH_CONF"]
+    assert "above_max_conflict_rate" in rejected[0]["rejection_reasons"]
+    assert "below_min_zero_conflict_contexts" in rejected[0]["rejection_reasons"]
+
+    cohorts = summarize_consensus_conflict_cohorts_v02(consensus_rows)
+    assert cohorts["candidate_count"] == 3
+    assert cohorts["conflict_free_count"] == 1
+    assert cohorts["partial_conflict_count"] == 1
+    assert cohorts["high_conflict_count"] == 1
+    assert (
+        cohorts["conflict_free_share"]
+        + cohorts["partial_conflict_share"]
+        + cohorts["high_conflict_share"]
+        == pytest.approx(1.0, abs=1e-3)
+    )
 
 
 def test_rank_shift_filtering_and_retention_cohorts_summary():
@@ -1020,4 +1078,3 @@ def test_snapshot_provenance_envelope():
     payload = build_ranked_hypothesis_payload_v02(sample, snapshot_id="snap_01", sha256="abc123")
     assert payload["summary"]["count"] == 1
     assert payload["snapshot"]["snapshot_id"] == "snap_01"
-

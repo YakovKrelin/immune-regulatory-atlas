@@ -47,6 +47,15 @@ def _jaccard(left: set[str], right: set[str]) -> float:
     return round(len(left & right) / len(union), 4)
 
 
+def _row_conflict_rate(row: dict[str, Any]) -> float:
+    if "conflict_rate" in row and row["conflict_rate"] is not None:
+        return float(row["conflict_rate"])
+    n_ctx = int(row.get("contexts_evaluated", 0))
+    zero_conflict = int(row.get("zero_conflict_contexts", 0))
+    conflicted_ctx = max(0, n_ctx - zero_conflict)
+    return conflicted_ctx / max(1, n_ctx)
+
+
 @dataclass(frozen=True)
 class PathScoringWeights:
     base_edge_score: float = 1.0
@@ -253,6 +262,86 @@ def score_candidate_path_v02(
         "net_score": net_score,
         "normalized_confidence": normalized_confidence,
         "score_breakdown": score_breakdown,
+    }
+
+
+def filter_consensus_by_conflict_rate_v02(
+    consensus_rows: list[dict[str, Any]],
+    max_conflict_rate: float = 1.0,
+    min_zero_conflict_contexts: int = 0,
+    include_rejected: bool = False,
+) -> list[dict[str, Any]]:
+    passed: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+
+    for row in consensus_rows:
+        rate = _row_conflict_rate(row)
+        zero_conflict = int(row.get("zero_conflict_contexts", 0))
+
+        reasons: list[str] = []
+        if rate > float(max_conflict_rate):
+            reasons.append("above_max_conflict_rate")
+        if zero_conflict < int(min_zero_conflict_contexts):
+            reasons.append("below_min_zero_conflict_contexts")
+
+        entry = dict(row)
+        entry["conflict_rate"] = round(rate, 4)
+        entry["zero_conflict_contexts"] = zero_conflict
+
+        if not reasons:
+            entry["accepted"] = True
+            entry["rejection_reasons"] = []
+            passed.append(entry)
+        elif include_rejected:
+            entry["accepted"] = False
+            entry["rejection_reasons"] = reasons
+            rejected.append(entry)
+
+    passed.sort(
+        key=lambda item: (
+            float(item.get("conflict_rate", 0.0)),
+            -float(item.get("mean_net_score", 0.0)),
+            -float(item.get("mean_normalized_confidence", 0.0)),
+            str(item.get("path_id", "")),
+        )
+    )
+    for idx, item in enumerate(passed, start=1):
+        item["rank"] = idx
+
+    if include_rejected:
+        rejected.sort(key=lambda item: str(item.get("path_id", "")))
+        return passed + rejected
+    return passed
+
+
+def summarize_consensus_conflict_cohorts_v02(
+    consensus_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not consensus_rows:
+        return {
+            "candidate_count": 0,
+            "conflict_free_count": 0,
+            "partial_conflict_count": 0,
+            "high_conflict_count": 0,
+            "conflict_free_share": 0.0,
+            "partial_conflict_share": 0.0,
+            "high_conflict_share": 0.0,
+        }
+
+    rates = [_row_conflict_rate(r) for r in consensus_rows]
+    n = len(rates)
+    free_cnt = sum(1 for val in rates if val <= 0.0)
+    partial_cnt = sum(1 for val in rates if 0.0 < val < 0.50)
+    high_cnt = sum(1 for val in rates if val >= 0.50)
+
+    return {
+        "candidate_count": n,
+        "conflict_free_count": free_cnt,
+        "partial_conflict_count": partial_cnt,
+        "high_conflict_count": high_cnt,
+        "conflict_free_share": round(free_cnt / n, 4),
+        "partial_conflict_share": round(partial_cnt / n, 4),
+        "high_conflict_share": round(high_cnt / n, 4),
     }
 
 
@@ -933,14 +1022,8 @@ def filter_consensus_by_thresholds_v02(
         reasons: list[str] = []
         mean_score = float(row.get("mean_net_score", 0.0))
         mean_conf = float(row.get("mean_normalized_confidence", 0.0))
-        n_ctx = int(row.get("contexts_evaluated", 0))
         zero_conflict = int(row.get("zero_conflict_contexts", 0))
-        conflicted_ctx = max(0, n_ctx - zero_conflict)
-        conflict_rate = (
-            float(row["conflict_rate"])
-            if "conflict_rate" in row and row["conflict_rate"] is not None
-            else (conflicted_ctx / max(1, n_ctx))
-        )
+        conflict_rate = _row_conflict_rate(row)
 
         if min_mean_net_score is not None and mean_score < float(min_mean_net_score):
             reasons.append("below_min_mean_net_score")
