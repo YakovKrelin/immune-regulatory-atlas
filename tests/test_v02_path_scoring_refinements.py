@@ -18,6 +18,7 @@ from bioos.engine.path_ranking import (
     compute_context_rank_stability_v02,
     compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
+    compute_path_sign_polarity_coherence_v02,
     compute_score_breakdown_shares_v02,
     evaluate_context_perturbation_stability_v02,
     evaluate_weight_sensitivity_v02,
@@ -27,6 +28,7 @@ from bioos.engine.path_ranking import (
     group_ranked_paths_by_context_v02,
     partition_paths_by_confidence_tier_v02,
     profile_context_field_sensitivity_v02,
+    rank_consensus_by_score_stability_v02,
     rank_contexts_for_path_v02,
     rank_differential_contexts_v02,
     rank_conflict_free_consensus_v02,
@@ -121,6 +123,38 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_sign_polarity_coherence_and_consensus_score_stability_ranking():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "sign": "+", "conflict": False},
+        {"id": "E2", "subject": "IL6", "object": "CRP", "sign": "+", "conflict": False},
+    ]
+    pol = compute_path_sign_polarity_coherence_v02(path_id="P_POS", edges=edges)
+    assert pol["edge_count"] == 2
+    assert pol["positive_ratio"] == 1.0
+    assert pol["negative_ratio"] == 0.0
+    assert pol["net_polarity_bias"] == 1.0
+    assert pol["polarity_coherence_score"] == 1.0
+
+    p_stable = {
+        "path_id": "P_STABLE",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    p_variable = {
+        "path_id": "P_VAR",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}}],
+    }
+    stab_ranked = rank_consensus_by_score_stability_v02(
+        candidates=[p_variable, p_stable],
+        context_candidates=[
+            {"context_id": "C1", "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
+            {"context_id": "C2", "context": {"tissue": "Liver", "cell_type": "Hepatocyte"}},
+        ],
+    )
+    assert [r["path_id"] for r in stab_ranked] == ["P_VAR", "P_STABLE"]
+    assert stab_ranked[0]["score_spread"] > stab_ranked[1]["score_spread"]
+    assert stab_ranked[1]["score_stability_index"] > stab_ranked[0]["score_stability_index"]
 
 
 def test_conflict_free_consensus_ranking():

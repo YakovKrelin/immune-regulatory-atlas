@@ -256,6 +256,101 @@ def score_candidate_path_v02(
     }
 
 
+def compute_path_sign_polarity_coherence_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+) -> dict[str, Any]:
+    attr = attribute_path_evidence_v02(edges=edges)
+    total = int(attr.get("total_edges", 0))
+    counts = attr.get("sign_counts") or {}
+    pos = int(counts.get("positive", 0))
+    neg = int(counts.get("negative", 0))
+    neu = int(counts.get("neutral", 0))
+
+    if total <= 0:
+        return {
+            "path_id": path_id,
+            "edge_count": 0,
+            "positive_ratio": 0.0,
+            "negative_ratio": 0.0,
+            "neutral_ratio": 0.0,
+            "net_polarity_bias": 0.0,
+            "polarity_coherence_score": 0.0,
+        }
+
+    pos_ratio = round(pos / total, 4)
+    neg_ratio = round(neg / total, 4)
+    neu_ratio = round(neu / total, 4)
+    bias = round((pos - neg) / total, 4)
+    directional_total = pos + neg
+    coherence = round(max(pos, neg) / directional_total, 4) if directional_total > 0 else 0.0
+
+    return {
+        "path_id": path_id,
+        "edge_count": total,
+        "positive_ratio": pos_ratio,
+        "negative_ratio": neg_ratio,
+        "neutral_ratio": neu_ratio,
+        "net_polarity_bias": bias,
+        "polarity_coherence_score": coherence,
+    }
+
+
+def rank_consensus_by_score_stability_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        pid = str(row.get("path_id", ""))
+        if pid:
+            by_path[pid].append(row)
+
+    ranked_rows: list[dict[str, Any]] = []
+    for pid, items in by_path.items():
+        scores = [float(i.get("net_score", 0.0)) for i in items]
+        n_ctx = len(items)
+        mean_score = round(sum(scores) / max(1, n_ctx), 4)
+        spread = round((max(scores) - min(scores)), 4) if scores else 0.0
+        stability = round(max(0.0, 1.0 - spread), 4)
+        zero_conflict = sum(1 for i in items if int(i.get("conflict_count", 0)) == 0)
+
+        ranked_rows.append(
+            {
+                "path_id": pid,
+                "contexts_evaluated": n_ctx,
+                "zero_conflict_contexts": zero_conflict,
+                "mean_net_score": mean_score,
+                "score_spread": spread,
+                "score_stability_index": stability,
+            }
+        )
+
+    ranked_rows.sort(
+        key=lambda item: (
+            -float(item["mean_net_score"]),
+            -float(item["score_stability_index"]),
+            -int(item["zero_conflict_contexts"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(ranked_rows, start=1):
+        item["rank"] = idx
+    return ranked_rows
+
+
 def compute_context_edge_support_density_v02(
     path_id: str,
     edges: list[dict[str, Any]],
