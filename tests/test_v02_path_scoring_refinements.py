@@ -17,6 +17,7 @@ from bioos.engine.path_ranking import (
     compute_context_field_coverage_v02,
     compute_context_rank_stability_v02,
     compute_context_specificity_v02,
+    compute_path_evidence_coverage_v02,
     compute_path_overlap_metrics_v02,
     compute_path_sign_polarity_coherence_v02,
     compute_score_breakdown_shares_v02,
@@ -29,6 +30,7 @@ from bioos.engine.path_ranking import (
     partition_paths_by_confidence_tier_v02,
     profile_context_field_sensitivity_v02,
     rank_consensus_by_score_stability_v02,
+    rank_consensus_with_conflict_penalty_v02,
     rank_contexts_for_path_v02,
     rank_differential_contexts_v02,
     rank_conflict_free_consensus_v02,
@@ -123,6 +125,35 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_evidence_coverage_and_conflict_penalized_consensus_ranking():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.8, "context": {"tissue": "Blood"}},
+        {"id": "E2", "subject": "IL6", "object": "CRP", "conflict": False, "evidence_score": 0.6, "context": {"tissue": "Blood"}},
+    ]
+    cov = compute_path_evidence_coverage_v02(path_id="P_EV", edges=edges)
+    assert cov["edge_count"] == 2
+    assert cov["conflict_free_ratio"] == 1.0
+    assert cov["supported_ratio"] == 1.0
+    assert cov["clean_support_index"] == 1.0
+
+    p_clean = {
+        "path_id": "P_CLEAN",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    p_conflicted = {
+        "path_id": "P_CONFLICTED",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Blood"}}],
+    }
+    pen_ranked = rank_consensus_with_conflict_penalty_v02(
+        candidates=[p_conflicted, p_clean],
+        context_candidates=[{"context_id": "C1", "context": {"tissue": "Blood"}}],
+        conflict_penalty_weight=0.50,
+    )
+    assert [r["path_id"] for r in pen_ranked] == ["P_CLEAN", "P_CONFLICTED"]
+    assert pen_ranked[0]["conflict_adjusted_mean_score"] > pen_ranked[1]["conflict_adjusted_mean_score"]
+    assert pen_ranked[1]["conflict_rate"] == 1.0
 
 
 def test_sign_polarity_coherence_and_consensus_score_stability_ranking():

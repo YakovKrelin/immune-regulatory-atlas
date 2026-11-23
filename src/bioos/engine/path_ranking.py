@@ -256,6 +256,96 @@ def score_candidate_path_v02(
     }
 
 
+def compute_path_evidence_coverage_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+) -> dict[str, Any]:
+    attr = attribute_path_evidence_v02(edges=edges)
+    total = int(attr.get("total_edges", 0))
+    clean = int(attr.get("conflict_free_edges", 0))
+    supported = int(attr.get("supported_edges", 0))
+
+    if total <= 0:
+        return {
+            "path_id": path_id,
+            "edge_count": 0,
+            "conflict_free_ratio": 0.0,
+            "supported_ratio": 0.0,
+            "clean_support_index": 0.0,
+        }
+
+    clean_ratio = round(clean / total, 4)
+    sup_ratio = round(supported / total, 4)
+    clean_support_idx = round((clean_ratio + sup_ratio) / 2.0, 4)
+
+    return {
+        "path_id": path_id,
+        "edge_count": total,
+        "conflict_free_ratio": clean_ratio,
+        "supported_ratio": sup_ratio,
+        "clean_support_index": clean_support_idx,
+    }
+
+
+def rank_consensus_with_conflict_penalty_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    conflict_penalty_weight: float = 0.50,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        pid = str(row.get("path_id", ""))
+        if pid:
+            by_path[pid].append(row)
+
+    pen_weight = max(0.0, float(conflict_penalty_weight))
+    ranked_rows: list[dict[str, Any]] = []
+    for pid, items in by_path.items():
+        n_ctx = len(items)
+        scores = [float(i.get("net_score", 0.0)) for i in items]
+        confs = [float(i.get("normalized_confidence", 0.0)) for i in items]
+        conflicted_ctx = sum(1 for i in items if int(i.get("conflict_count", 0)) > 0)
+        conflict_rate = round(conflicted_ctx / max(1, n_ctx), 4)
+        mean_score = round(sum(scores) / max(1, n_ctx), 4)
+        mean_conf = round(sum(confs) / max(1, n_ctx), 4)
+        adj_score = round(mean_score - (pen_weight * conflict_rate), 4)
+
+        ranked_rows.append(
+            {
+                "path_id": pid,
+                "contexts_evaluated": n_ctx,
+                "conflicted_contexts": conflicted_ctx,
+                "conflict_rate": conflict_rate,
+                "mean_net_score": mean_score,
+                "conflict_adjusted_mean_score": adj_score,
+                "mean_normalized_confidence": mean_conf,
+            }
+        )
+
+    ranked_rows.sort(
+        key=lambda item: (
+            -float(item["conflict_adjusted_mean_score"]),
+            -float(item["mean_normalized_confidence"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(ranked_rows, start=1):
+        item["rank"] = idx
+    return ranked_rows
+
+
 def compute_path_sign_polarity_coherence_v02(
     path_id: str,
     edges: list[dict[str, Any]],
