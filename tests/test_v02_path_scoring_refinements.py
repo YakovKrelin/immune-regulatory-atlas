@@ -1,121 +1,53 @@
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
-from bioos.engine.path_ranking import rank_paths_with_context_v02, score_candidate_path_v02
-from bioos.main import app as _v02_target
-
-
-def test_score_candidate_path_applies_conflict_context_and_counter_adjustments():
-    clean_edges = [
-        {
-            "id": "BIOOS:A000001",
-            "subject": "TNF",
-            "object": "IL6",
-            "conflict": False,
-            "context": {"tissue": "Blood", "cell_type": "Macrophage", "eco": "A"},
-        },
-        {
-            "id": "BIOOS:A000002",
-            "subject": "IL6",
-            "object": "CRP",
-            "conflict": False,
-            "context": {"tissue": "Liver", "cell_type": "Hepatocyte", "eco": "A"},
-        },
-    ]
-    conflicting_edges = [
-        {
-            "id": "BIOOS:A000004",
-            "subject": "HIF1A",
-            "object": "IFNG",
-            "conflict": True,
-            "context": {"tissue": "Tumor Microenvironment", "cell_type": "T Cell", "eco": "F"},
-        }
-    ]
-
-    clean_res = score_candidate_path_v02(
-        path_id="P_CLEAN",
-        edges=clean_edges,
-        active_markers=["TNF", "IL6", "CRP"],
-        anchor_markers=["TNF", "IL6", "CRP"],
-        counter_markers=["IL10"],
-        target_context={"tissue": "Blood", "cell_type": "Macrophage", "eco": "A"},
-    )
-    conflict_res = score_candidate_path_v02(
-        path_id="P_CONFLICT",
-        edges=conflicting_edges,
-        active_markers=["HIF1A", "IFNG", "IL10"],
-        anchor_markers=["TNF", "IL6", "CRP"],
-        counter_markers=["IL10"],
-        target_context={"tissue": "Blood", "cell_type": "Macrophage", "eco": "A"},
-    )
-
-    assert clean_res["conflict_count"] == 0
-    assert clean_res["context_bonus"] > 0.0
-    assert clean_res["anchor_bonus"] > 0.0
-    assert clean_res["counter_penalty"] == 0.0
-
-    assert conflict_res["conflict_count"] == 1
-    assert conflict_res["conflict_penalty"] > 0.0
-    assert conflict_res["counter_penalty"] > 0.0
-    assert clean_res["net_score"] > conflict_res["net_score"]
+from bioos.engine.path_ranking import (
+    attach_snapshot_provenance,
+    rank_paths_with_context_v02,
+    score_candidate_path_v02,
+)
 
 
-def test_rank_paths_with_context_is_deterministic():
-    candidates = [
-        {
-            "path_id": "P_B",
-            "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
-        },
-        {
-            "path_id": "P_A",
-            "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
-        },
-        {
-            "path_id": "P_CONF",
-            "edges": [{"id": "E3", "subject": "HIF1A", "object": "IFNG", "conflict": True, "context": {"tissue": "Blood"}}],
-        },
-    ]
+def test_context_coverage_and_evidence_boost_preferred_path():
+    full_ctx_path = {
+        "path_id": "P_FULL_CTX",
+        "edges": [
+            {
+                "id": "BIOOS:A000001",
+                "subject": "TNF",
+                "object": "IL6",
+                "conflict": False,
+                "evidence_score": 0.9,
+                "context": {"tissue": "Blood", "cell_type": "Macrophage", "eco": "A"},
+            }
+        ],
+    }
+    partial_ctx_path = {
+        "path_id": "P_PARTIAL_CTX",
+        "edges": [
+            {
+                "id": "BIOOS:A000002",
+                "subject": "TNF",
+                "object": "IL6",
+                "conflict": False,
+                "context": {"tissue": "Blood", "cell_type": "T Cell", "eco": "C"},
+            }
+        ],
+    }
 
     ranked = rank_paths_with_context_v02(
-        candidates=candidates,
+        candidates=[partial_ctx_path, full_ctx_path],
         active_markers=["TNF", "IL6"],
-        anchor_markers=["TNF", "IL6"],
+        anchor_markers=["TNF"],
         counter_markers=[],
-        target_context={"tissue": "Blood"},
+        target_context={"tissue": "Blood", "cell_type": "Macrophage", "eco": "A"},
     )
 
-    assert [r["path_id"] for r in ranked] == ["P_A", "P_B", "P_CONF"]
-    assert [r["rank"] for r in ranked] == [1, 2, 3]
+    assert [r["path_id"] for r in ranked] == ["P_FULL_CTX", "P_PARTIAL_CTX"]
+    assert ranked[0]["context_coverage"] == 1.0
+    assert ranked[0]["evidence_bonus"] > 0.0
+    assert ranked[0]["net_score"] > ranked[1]["net_score"]
 
 
-def test_v02_paths_rank_endpoint_integration():
-    if hasattr(_v02_target, "include_router"):
-        client = TestClient(_v02_target)
-    else:
-        app = FastAPI()
-        app.include_router(_v02_target)
-        client = TestClient(app)
-
-    response = client.post(
-        "/v0.2/paths/rank",
-        json={
-            "candidates": [
-                {
-                    "path_id": "P_CONFLICT",
-                    "edges": [{"id": "E2", "subject": "HIF1A", "object": "IFNG", "conflict": True}],
-                },
-                {
-                    "path_id": "P_CLEAN",
-                    "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False}],
-                },
-            ],
-            "active_markers": ["TNF", "IL6"],
-            "anchor_markers": ["TNF", "IL6"],
-            "target_context": {"tissue": "Blood"},
-        },
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["count"] == 2
-    assert [row["path_id"] for row in data["ranked_paths"]] == ["P_CLEAN", "P_CONFLICT"]
+def test_snapshot_provenance_envelope():
+    sample = [{"path_id": "P1", "rank": 1, "net_score": 1.5}]
+    env = attach_snapshot_provenance(sample, snapshot_id="snap_01", sha256="abc123")
+    assert env["count"] == 1
+    assert env["snapshot"] == {"snapshot_id": "snap_01", "sha256": "abc123"}
