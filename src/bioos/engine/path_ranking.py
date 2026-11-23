@@ -256,6 +256,77 @@ def score_candidate_path_v02(
     }
 
 
+def attribute_marker_group_contributions_v02(
+    scored_path: dict[str, Any],
+) -> dict[str, Any]:
+    anchor_val = round(float(scored_path.get("anchor_bonus", 0.0)), 4)
+    active_cov_val = round(float(scored_path.get("active_coverage_bonus", 0.0)), 4)
+    counter_pen_val = round(float(scored_path.get("counter_penalty", 0.0)), 4)
+    net_marker = round(anchor_val + active_cov_val - counter_pen_val, 4)
+
+    return {
+        "path_id": str(scored_path.get("path_id", "")),
+        "matched_anchor_count": len(scored_path.get("matched_anchors") or []),
+        "matched_active_count": len(scored_path.get("matched_active_markers") or []),
+        "matched_counter_count": len(scored_path.get("matched_counter_markers") or []),
+        "anchor_contribution": anchor_val,
+        "active_coverage_contribution": active_cov_val,
+        "counter_penalty_impact": round(-counter_pen_val, 4),
+        "net_marker_effect": net_marker,
+    }
+
+
+def compare_context_rankings_v02(
+    candidates: list[dict[str, Any]],
+    context_a: dict[str, Any] | None,
+    context_b: dict[str, Any] | None,
+    top_k: int = 5,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, Any]:
+    ranked_a = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=context_a,
+        weights=weights,
+    )
+    ranked_b = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=context_b,
+        weights=weights,
+    )
+
+    k = max(1, int(top_k))
+    top_a = {str(r.get("path_id", "")) for r in ranked_a[:k] if r.get("path_id")}
+    top_b = {str(r.get("path_id", "")) for r in ranked_b[:k] if r.get("path_id")}
+    top_k_jaccard = _jaccard(top_a, top_b)
+
+    shifts = audit_path_rank_shifts_v02(ranked_a, ranked_b)
+    rank_deltas = [abs(int(s["rank_delta"])) for s in shifts if s.get("rank_delta") is not None]
+    score_deltas = [float(s["delta_net_score"]) for s in shifts]
+
+    top_id_a = ranked_a[0].get("path_id") if ranked_a else None
+    top_id_b = ranked_b[0].get("path_id") if ranked_b else None
+
+    return {
+        "candidate_count": len(candidates),
+        "top_k": k,
+        "top_k_jaccard": top_k_jaccard,
+        "top_path_context_a": top_id_a,
+        "top_path_context_b": top_id_b,
+        "top_path_preserved": bool(top_id_a is not None and top_id_a == top_id_b),
+        "mean_abs_rank_shift": round(sum(rank_deltas) / len(rank_deltas), 4) if rank_deltas else 0.0,
+        "mean_score_delta": round(sum(score_deltas) / len(score_deltas), 4) if score_deltas else 0.0,
+    }
+
+
 def compute_context_field_coverage_v02(
     edges: list[dict[str, Any]],
     target_context: dict[str, Any] | None = None,

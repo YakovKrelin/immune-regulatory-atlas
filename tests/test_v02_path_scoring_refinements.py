@@ -2,12 +2,14 @@ from bioos.engine.path_ranking import (
     PathScoringWeights,
     aggregate_weight_variant_consensus_v02,
     attach_snapshot_provenance,
+    attribute_marker_group_contributions_v02,
     attribute_path_evidence_v02,
     audit_context_score_shifts_v02,
     audit_path_rank_shifts_v02,
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
     classify_rank_margins_v02,
+    compare_context_rankings_v02,
     compare_path_scores_v02,
     compute_context_field_coverage_v02,
     compute_context_specificity_v02,
@@ -77,9 +79,37 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
     assert "bonuses" in ranked[0]["score_breakdown"]
 
+    marker_contrib = attribute_marker_group_contributions_v02(ranked[0])
+    assert marker_contrib["matched_anchor_count"] == 1
+    assert marker_contrib["matched_active_count"] == 2
+    assert marker_contrib["net_marker_effect"] > 0.0
+
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_context_pair_ranking_comparison():
+    p_blood = {
+        "path_id": "P_BLOOD",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    p_liver = {
+        "path_id": "P_LIVER",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Liver"}}],
+    }
+
+    comp = compare_context_rankings_v02(
+        candidates=[p_blood, p_liver],
+        context_a={"tissue": "Blood"},
+        context_b={"tissue": "Liver"},
+        top_k=1,
+    )
+    assert comp["top_k_jaccard"] == 0.0
+    assert comp["top_path_context_a"] == "P_BLOOD"
+    assert comp["top_path_context_b"] == "P_LIVER"
+    assert comp["top_path_preserved"] is False
+    assert comp["mean_abs_rank_shift"] == 1.0
 
 
 def test_context_field_coverage_sensitivity_and_conflict_tradeoff():
