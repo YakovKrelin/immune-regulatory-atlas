@@ -256,6 +256,122 @@ def score_candidate_path_v02(
     }
 
 
+def filter_consensus_by_thresholds_v02(
+    consensus_rows: list[dict[str, Any]],
+    min_mean_net_score: float | None = None,
+    min_mean_normalized_confidence: float | None = None,
+    max_conflict_rate: float | None = None,
+    min_zero_conflict_contexts: int | None = None,
+    include_rejected: bool = False,
+) -> list[dict[str, Any]]:
+    passed: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+
+    for row in consensus_rows:
+        reasons: list[str] = []
+        mean_score = float(row.get("mean_net_score", 0.0))
+        mean_conf = float(row.get("mean_normalized_confidence", 0.0))
+        n_ctx = int(row.get("contexts_evaluated", 0))
+        zero_conflict = int(row.get("zero_conflict_contexts", 0))
+        conflicted_ctx = max(0, n_ctx - zero_conflict)
+        conflict_rate = (
+            float(row["conflict_rate"])
+            if "conflict_rate" in row and row["conflict_rate"] is not None
+            else (conflicted_ctx / max(1, n_ctx))
+        )
+
+        if min_mean_net_score is not None and mean_score < float(min_mean_net_score):
+            reasons.append("below_min_mean_net_score")
+        if min_mean_normalized_confidence is not None and mean_conf < float(min_mean_normalized_confidence):
+            reasons.append("below_min_mean_normalized_confidence")
+        if max_conflict_rate is not None and conflict_rate > float(max_conflict_rate):
+            reasons.append("above_max_conflict_rate")
+        if min_zero_conflict_contexts is not None and zero_conflict < int(min_zero_conflict_contexts):
+            reasons.append("below_min_zero_conflict_contexts")
+
+        entry = dict(row)
+        entry["conflict_rate"] = round(conflict_rate, 4)
+        if not reasons:
+            entry["accepted"] = True
+            entry["rejection_reasons"] = []
+            passed.append(entry)
+        elif include_rejected:
+            entry["accepted"] = False
+            entry["rejection_reasons"] = reasons
+            rejected.append(entry)
+
+    passed.sort(
+        key=lambda item: (
+            -float(item.get("mean_net_score", 0.0)),
+            -float(item.get("mean_normalized_confidence", 0.0)),
+            -int(item.get("zero_conflict_contexts", 0)),
+            str(item.get("path_id", "")),
+        )
+    )
+    for idx, item in enumerate(passed, start=1):
+        item["rank"] = idx
+
+    if include_rejected:
+        rejected.sort(key=lambda item: str(item.get("path_id", "")))
+        return passed + rejected
+    return passed
+
+
+def compute_conflict_aware_confidence_dispersion_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, Any]:
+    adj_values: list[float] = []
+    for ctx_item in context_candidates:
+        payload = ctx_item.get("context") if isinstance(ctx_item.get("context"), dict) else ctx_item
+        scored = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=payload,
+            weights=weights,
+        )
+        conf = float(scored.get("normalized_confidence", 0.0))
+        edge_cnt = max(1, int(scored.get("edge_count", 0)))
+        conflict_cnt = int(scored.get("conflict_count", 0))
+        conflict_ratio = min(1.0, max(0.0, conflict_cnt / edge_cnt))
+        adj_values.append(_clamp01(conf * (1.0 - conflict_ratio)))
+
+    if not adj_values:
+        return {
+            "path_id": path_id,
+            "contexts_evaluated": 0,
+            "min_adjusted_confidence": 0.0,
+            "max_adjusted_confidence": 0.0,
+            "adjusted_confidence_range": 0.0,
+            "mean_adjusted_confidence": 0.0,
+            "adjusted_confidence_consistency": 1.0,
+        }
+
+    min_adj = round(min(adj_values), 4)
+    max_adj = round(max(adj_values), 4)
+    adj_range = round(max_adj - min_adj, 4)
+    mean_adj = round(sum(adj_values) / len(adj_values), 4)
+    consistency = round(max(0.0, 1.0 - adj_range), 4)
+
+    return {
+        "path_id": path_id,
+        "contexts_evaluated": len(adj_values),
+        "min_adjusted_confidence": min_adj,
+        "max_adjusted_confidence": max_adj,
+        "adjusted_confidence_range": adj_range,
+        "mean_adjusted_confidence": mean_adj,
+        "adjusted_confidence_consistency": consistency,
+    }
+
+
 def compute_path_conflict_intensity_v02(
     path_id: str,
     edges: list[dict[str, Any]],

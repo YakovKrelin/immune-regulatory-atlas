@@ -12,6 +12,7 @@ from bioos.engine.path_ranking import (
     classify_rank_margins_v02,
     compare_context_rankings_v02,
     compare_path_scores_v02,
+    compute_conflict_aware_confidence_dispersion_v02,
     compute_context_coverage_dispersion_v02,
     compute_context_edge_support_density_v02,
     compute_context_field_coverage_v02,
@@ -27,6 +28,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    filter_consensus_by_thresholds_v02,
     gate_paths_by_required_context_v02,
     group_ranked_paths_by_context_v02,
     partition_paths_by_confidence_tier_v02,
@@ -129,6 +131,45 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_consensus_threshold_filtering_and_conflict_aware_dispersion():
+    p_clean = {
+        "path_id": "P_CLEAN",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    p_conflicted = {
+        "path_id": "P_CONFLICTED",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "evidence_score": 0.9, "context": {"tissue": "Liver"}}],
+    }
+    consensus_rows = rank_consensus_by_conflict_aware_confidence_v02(
+        candidates=[p_conflicted, p_clean],
+        context_candidates=[{"context_id": "C1", "context": {"tissue": "Blood"}}],
+    )
+    filtered = filter_consensus_by_thresholds_v02(
+        consensus_rows=consensus_rows,
+        max_conflict_rate=0.0,
+        min_zero_conflict_contexts=1,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_CLEAN"]
+    assert accepted[0]["rank"] == 1
+    assert [r["path_id"] for r in rejected] == ["P_CONFLICTED"]
+    assert "above_max_conflict_rate" in rejected[0]["rejection_reasons"]
+
+    disp = compute_conflict_aware_confidence_dispersion_v02(
+        path_id="P_CLEAN",
+        edges=p_clean["edges"],
+        context_candidates=[
+            {"context_id": "C1", "context": {"tissue": "Blood"}},
+            {"context_id": "C2", "context": {"tissue": "Liver"}},
+        ],
+    )
+    assert disp["contexts_evaluated"] == 2
+    assert disp["max_adjusted_confidence"] >= disp["min_adjusted_confidence"]
+    assert 0.0 <= disp["adjusted_confidence_consistency"] <= 1.0
 
 
 def test_conflict_intensity_and_conflict_aware_confidence_consensus():
