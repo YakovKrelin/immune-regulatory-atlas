@@ -1,3 +1,4 @@
+import pytest
 from bioos.engine.path_ranking import (
     PathScoringWeights,
     aggregate_weight_variant_consensus_v02,
@@ -33,6 +34,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    filter_consensus_by_rank_shift_v02,
     filter_consensus_by_retention_v02,
     filter_consensus_by_stability_confidence_v02,
     filter_consensus_by_stability_v02,
@@ -62,6 +64,7 @@ from bioos.engine.path_ranking import (
     select_top_paths_v02,
     serialize_ranked_paths_v02,
     summarize_consensus_rank_shifts_v02,
+    summarize_consensus_retention_cohorts_v02,
     summarize_consensus_retention_dispersion_v02,
     summarize_consensus_stability_v02,
     summarize_context_breadth_v02,
@@ -145,6 +148,41 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_rank_shift_filtering_and_retention_cohorts_summary():
+    consensus_rows = [
+        {"path_id": "P_SHIFT_2", "mean_net_score": 2.0, "mean_normalized_confidence": 0.9},
+        {"path_id": "P_SHIFT_0", "mean_net_score": 1.5, "mean_normalized_confidence": 0.8},
+        {"path_id": "P_SHIFT_3", "mean_net_score": 1.2, "mean_normalized_confidence": 0.5},
+    ]
+    stability_rows = [
+        {"path_id": "P_SHIFT_2", "consensus_retention_rate": 0.6, "max_rank_shift": 2},
+        {"path_id": "P_SHIFT_0", "consensus_retention_rate": 1.0, "max_rank_shift": 0},
+        {"path_id": "P_SHIFT_3", "consensus_retention_rate": 0.25, "max_rank_shift": 3},
+    ]
+
+    filtered = filter_consensus_by_rank_shift_v02(
+        consensus_rows=consensus_rows,
+        stability_rows=stability_rows,
+        max_rank_shift=2,
+        min_retention_rate=0.5,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_SHIFT_0", "P_SHIFT_2"]
+    assert [r["rank"] for r in accepted] == [1, 2]
+    assert [r["path_id"] for r in rejected] == ["P_SHIFT_3"]
+    assert "above_max_rank_shift" in rejected[0]["rejection_reasons"]
+    assert "below_min_retention_rate" in rejected[0]["rejection_reasons"]
+
+    cohorts = summarize_consensus_retention_cohorts_v02(stability_rows)
+    assert cohorts["candidate_count"] == 3
+    assert cohorts["high_retention_count"] == 1
+    assert cohorts["moderate_retention_count"] == 1
+    assert cohorts["low_retention_count"] == 1
+    assert cohorts["high_retention_share"] + cohorts["moderate_retention_share"] + cohorts["low_retention_share"] == pytest.approx(1.0, abs=1e-3)
 
 
 def test_retention_filtering_and_retention_dispersion_summary():
@@ -982,3 +1020,4 @@ def test_snapshot_provenance_envelope():
     payload = build_ranked_hypothesis_payload_v02(sample, snapshot_id="snap_01", sha256="abc123")
     assert payload["summary"]["count"] == 1
     assert payload["snapshot"]["snapshot_id"] == "snap_01"
+

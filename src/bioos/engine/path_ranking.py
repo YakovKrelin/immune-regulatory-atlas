@@ -256,6 +256,94 @@ def score_candidate_path_v02(
     }
 
 
+def filter_consensus_by_rank_shift_v02(
+    consensus_rows: list[dict[str, Any]],
+    stability_rows: list[dict[str, Any]],
+    max_rank_shift: int | None = None,
+    min_retention_rate: float = 0.0,
+    include_rejected: bool = False,
+) -> list[dict[str, Any]]:
+    stab_by_id = {
+        str(item.get("path_id", "")): item
+        for item in stability_rows
+        if item.get("path_id")
+    }
+    passed: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+
+    for row in consensus_rows:
+        pid = str(row.get("path_id", ""))
+        s_item = stab_by_id.get(pid, {})
+        shift = int(s_item.get("max_rank_shift", 0))
+        retention = float(s_item.get("consensus_retention_rate", 1.0))
+
+        reasons: list[str] = []
+        if max_rank_shift is not None and shift > int(max_rank_shift):
+            reasons.append("above_max_rank_shift")
+        if retention < float(min_retention_rate):
+            reasons.append("below_min_retention_rate")
+
+        entry = dict(row)
+        entry["max_rank_shift"] = shift
+        entry["consensus_retention_rate"] = round(retention, 4)
+
+        if not reasons:
+            entry["accepted"] = True
+            entry["rejection_reasons"] = []
+            passed.append(entry)
+        elif include_rejected:
+            entry["accepted"] = False
+            entry["rejection_reasons"] = reasons
+            rejected.append(entry)
+
+    passed.sort(
+        key=lambda item: (
+            int(item.get("max_rank_shift", 0)),
+            -float(item.get("consensus_retention_rate", 0.0)),
+            -float(item.get("mean_normalized_confidence", 0.0)),
+            str(item.get("path_id", "")),
+        )
+    )
+    for idx, item in enumerate(passed, start=1):
+        item["rank"] = idx
+
+    if include_rejected:
+        rejected.sort(key=lambda item: str(item.get("path_id", "")))
+        return passed + rejected
+    return passed
+
+
+def summarize_consensus_retention_cohorts_v02(
+    stability_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not stability_rows:
+        return {
+            "candidate_count": 0,
+            "high_retention_count": 0,
+            "moderate_retention_count": 0,
+            "low_retention_count": 0,
+            "high_retention_share": 0.0,
+            "moderate_retention_share": 0.0,
+            "low_retention_share": 0.0,
+        }
+
+    retentions = [float(r.get("consensus_retention_rate", 0.0)) for r in stability_rows]
+    n = len(retentions)
+    high_cnt = sum(1 for val in retentions if val >= 0.75)
+    mod_cnt = sum(1 for val in retentions if 0.50 <= val < 0.75)
+    low_cnt = sum(1 for val in retentions if val < 0.50)
+
+    return {
+        "candidate_count": n,
+        "high_retention_count": high_cnt,
+        "moderate_retention_count": mod_cnt,
+        "low_retention_count": low_cnt,
+        "high_retention_share": round(high_cnt / n, 4),
+        "moderate_retention_share": round(mod_cnt / n, 4),
+        "low_retention_share": round(low_cnt / n, 4),
+    }
+
+
 def filter_consensus_by_retention_v02(
     consensus_rows: list[dict[str, Any]],
     stability_rows: list[dict[str, Any]],
