@@ -1,5 +1,6 @@
 from bioos.engine.path_ranking import (
     PathScoringWeights,
+    aggregate_weight_variant_consensus_v02,
     attach_snapshot_provenance,
     attribute_path_evidence_v02,
     audit_path_rank_shifts_v02,
@@ -11,6 +12,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    gate_paths_by_required_context_v02,
     group_ranked_paths_by_context_v02,
     partition_paths_by_confidence_tier_v02,
     rank_contexts_for_path_v02,
@@ -194,14 +196,18 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     assert len(matrix) == 2
 
 
-def test_filter_and_rank_paths_v02():
+def test_filter_and_required_context_gating_v02():
     clean_p = {
         "path_id": "P_CLEAN",
-        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}}],
+    }
+    tissue_only_p = {
+        "path_id": "P_TISSUE_ONLY",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
     }
     conflicted_p = {
         "path_id": "P_CONFLICT",
-        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Blood"}}],
+        "edges": [{"id": "E3", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Blood", "cell_type": "Macrophage"}}],
     }
 
     surviving = filter_and_rank_paths_v02(
@@ -212,6 +218,13 @@ def test_filter_and_rank_paths_v02():
     )
     assert [r["path_id"] for r in surviving] == ["P_CLEAN"]
     assert surviving[0]["rank"] == 1
+
+    gated = gate_paths_by_required_context_v02(
+        candidates=[tissue_only_p, clean_p],
+        required_context={"tissue": "Blood", "cell_type": "Macrophage"},
+    )
+    assert [r["path_id"] for r in gated] == ["P_CLEAN"]
+    assert gated[0]["rank"] == 1
 
 
 def test_weight_sensitivity_and_rank_shifts():
@@ -233,6 +246,10 @@ def test_weight_sensitivity_and_rank_shifts():
     by_id = {row["path_id"]: row for row in shifts}
     assert by_id["P_CTX"]["perturbed_rank"] == 1
     assert by_id["P_CTX"]["delta_net_score"] > 0.0
+
+    variant_consensus = aggregate_weight_variant_consensus_v02(variants)
+    assert variant_consensus[0]["path_id"] == "P_CTX"
+    assert variant_consensus[0]["variants_evaluated"] == 2
 
 
 def test_evidence_attribution_and_ranking_explanation():

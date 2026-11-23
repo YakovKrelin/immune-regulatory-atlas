@@ -606,6 +606,42 @@ def filter_and_rank_paths_v02(
     return filtered
 
 
+def gate_paths_by_required_context_v02(
+    candidates: list[dict[str, Any]],
+    required_context: dict[str, Any],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    required_fields = {
+        str(k).strip().lower()
+        for k, v in (required_context or {}).items()
+        if _norm_str(v)
+    }
+    ranked_all = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=required_context,
+        weights=weights,
+    )
+    if not required_fields:
+        return ranked_all
+
+    gated: list[dict[str, Any]] = []
+    for row in ranked_all:
+        matched = {str(f).strip().lower() for f in (row.get("matched_context_fields") or [])}
+        if required_fields.issubset(matched):
+            entry = dict(row)
+            gated.append(entry)
+
+    for idx, entry in enumerate(gated, start=1):
+        entry["rank"] = idx
+    return gated
+
+
 def rank_contexts_for_path_v02(
     path_id: str,
     edges: list[dict[str, Any]],
@@ -888,6 +924,52 @@ def evaluate_weight_sensitivity_v02(
             weights=weight_variants[variant_name],
         )
     return results
+
+
+def aggregate_weight_variant_consensus_v02(
+    variant_rankings: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    by_path_ranks: dict[str, list[int]] = defaultdict(list)
+    by_path_scores: dict[str, list[float]] = defaultdict(list)
+
+    for _variant_name, ranked_list in variant_rankings.items():
+        for row in ranked_list:
+            pid = str(row.get("path_id", ""))
+            if not pid:
+                continue
+            by_path_ranks[pid].append(int(row.get("rank", 999999)))
+            by_path_scores[pid].append(float(row.get("net_score", 0.0)))
+
+    summary_rows: list[dict[str, Any]] = []
+    for pid in sorted(by_path_ranks.keys()):
+        ranks = by_path_ranks[pid]
+        scores = by_path_scores[pid]
+        best_r = min(ranks)
+        worst_r = max(ranks)
+        mean_r = round(sum(ranks) / len(ranks), 4)
+        mean_s = round(sum(scores) / len(scores), 4)
+        summary_rows.append(
+            {
+                "path_id": pid,
+                "variants_evaluated": len(ranks),
+                "mean_rank": mean_r,
+                "best_rank": best_r,
+                "worst_rank": worst_r,
+                "rank_volatility": worst_r - best_r,
+                "mean_net_score": mean_s,
+            }
+        )
+
+    summary_rows.sort(
+        key=lambda item: (
+            float(item["mean_rank"]),
+            int(item["rank_volatility"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(summary_rows, start=1):
+        item["rank"] = idx
+    return summary_rows
 
 
 def audit_path_rank_shifts_v02(
