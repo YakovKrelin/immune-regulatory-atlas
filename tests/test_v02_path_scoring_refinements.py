@@ -1,5 +1,6 @@
 from bioos.engine.path_ranking import (
     attach_snapshot_provenance,
+    compare_path_scores_v02,
     rank_contexts_for_path_v02,
     rank_paths_across_contexts_v02,
     rank_paths_with_context_v02,
@@ -46,6 +47,8 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert ranked[0]["context_coverage"] == 1.0
     assert ranked[0]["evidence_bonus"] > 0.0
     assert ranked[0]["net_score"] > ranked[1]["net_score"]
+    assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
+    assert "bonuses" in ranked[0]["score_breakdown"]
 
 
 def test_sign_consistency_and_context_ranking():
@@ -118,6 +121,12 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     assert ranked[0]["path_id"] == "P_CLEAN"
     assert ranked[0]["context_id"] == "CTX_BLOOD"
     assert ranked[0]["rank"] == 1
+
+    s_clean = score_candidate_path_v02("P_CLEAN", path_clean["edges"], counter_markers=["IL10"])
+    s_counter = score_candidate_path_v02("P_COUNTER", path_counter["edges"], counter_markers=["IL10"])
+    diff = compare_path_scores_v02(s_clean, s_counter)
+    assert diff["delta_net_score"] > 0.0
+    assert diff["delta_counter_penalty"] < 0.0
 
 
 def test_snapshot_provenance_envelope():

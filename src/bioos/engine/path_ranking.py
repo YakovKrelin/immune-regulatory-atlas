@@ -32,6 +32,14 @@ def _norm_sign(value: Any) -> int:
     return 0
 
 
+def _clamp01(value: float) -> float:
+    if value < 0.0:
+        return 0.0
+    if value > 1.0:
+        return 1.0
+    return round(value, 4)
+
+
 @dataclass(frozen=True)
 class PathScoringWeights:
     base_edge_score: float = 1.0
@@ -182,6 +190,35 @@ def score_candidate_path_v02(
         4,
     )
 
+    max_possible_score = max(
+        1.0,
+        edge_count
+        * (
+            weights.base_edge_score
+            + weights.anchor_bonus_per_match
+            + weights.context_match_bonus
+            + weights.evidence_bonus_per_edge
+            + weights.sign_consistency_bonus
+        )
+        + weights.active_coverage_bonus
+        + weights.context_coverage_bonus,
+    )
+    normalized_confidence = _clamp01(net_score / max_possible_score)
+
+    score_breakdown = {
+        "bonuses": {
+            "anchor": anchor_bonus,
+            "active_coverage": active_coverage_bonus,
+            "context": context_bonus,
+            "evidence": evidence_bonus,
+            "sign": sign_bonus,
+        },
+        "penalties": {
+            "conflict": conflict_penalty,
+            "counter_marker": counter_penalty,
+        },
+    }
+
     return {
         "path_id": path_id,
         "edge_count": edge_count,
@@ -207,6 +244,48 @@ def score_candidate_path_v02(
         "conflict_penalty": conflict_penalty,
         "counter_penalty": counter_penalty,
         "net_score": net_score,
+        "normalized_confidence": normalized_confidence,
+        "score_breakdown": score_breakdown,
+    }
+
+
+def compare_path_scores_v02(
+    primary_score: dict[str, Any],
+    baseline_score: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "primary_path_id": primary_score.get("path_id"),
+        "baseline_path_id": baseline_score.get("path_id"),
+        "delta_net_score": round(
+            float(primary_score.get("net_score", 0.0))
+            - float(baseline_score.get("net_score", 0.0)),
+            4,
+        ),
+        "delta_normalized_confidence": round(
+            float(primary_score.get("normalized_confidence", 0.0))
+            - float(baseline_score.get("normalized_confidence", 0.0)),
+            4,
+        ),
+        "delta_context_bonus": round(
+            float(primary_score.get("context_bonus", 0.0))
+            - float(baseline_score.get("context_bonus", 0.0)),
+            4,
+        ),
+        "delta_evidence_bonus": round(
+            float(primary_score.get("evidence_bonus", 0.0))
+            - float(baseline_score.get("evidence_bonus", 0.0)),
+            4,
+        ),
+        "delta_conflict_penalty": round(
+            float(primary_score.get("conflict_penalty", 0.0))
+            - float(baseline_score.get("conflict_penalty", 0.0)),
+            4,
+        ),
+        "delta_counter_penalty": round(
+            float(primary_score.get("counter_penalty", 0.0))
+            - float(baseline_score.get("counter_penalty", 0.0)),
+            4,
+        ),
     }
 
 
