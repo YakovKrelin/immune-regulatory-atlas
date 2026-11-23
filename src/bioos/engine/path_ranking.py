@@ -256,6 +256,92 @@ def score_candidate_path_v02(
     }
 
 
+def compute_context_rank_stability_v02(
+    candidates: list[dict[str, Any]],
+    baseline_context: dict[str, Any] | None,
+    perturbed_contexts: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    base_ranked = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=baseline_context,
+        weights=weights,
+    )
+    base_by_id = {str(r.get("path_id", "")): r for r in base_ranked if r.get("path_id")}
+
+    pert_rankings: list[dict[str, int]] = []
+    for p_ctx in perturbed_contexts:
+        payload = p_ctx.get("context") if isinstance(p_ctx.get("context"), dict) else p_ctx
+        ranked_p = rank_paths_with_context_v02(
+            candidates=candidates,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=payload,
+            weights=weights,
+        )
+        pert_rankings.append({str(r.get("path_id", "")): int(r.get("rank", 0)) for r in ranked_p if r.get("path_id")})
+
+    n_pert = len(pert_rankings)
+    rows: list[dict[str, Any]] = []
+    for pid in sorted(base_by_id.keys()):
+        b_rank = int(base_by_id[pid].get("rank", 0))
+        unchanged = 0
+        deviations: list[int] = []
+        for p_map in pert_rankings:
+            p_rank = int(p_map.get(pid, b_rank))
+            if p_rank == b_rank:
+                unchanged += 1
+            deviations.append(abs(p_rank - b_rank))
+
+        retention = round(unchanged / n_pert, 4) if n_pert > 0 else 1.0
+        mean_dev = round(sum(deviations) / len(deviations), 4) if deviations else 0.0
+        rows.append(
+            {
+                "path_id": pid,
+                "baseline_rank": b_rank,
+                "perturbed_contexts_evaluated": n_pert,
+                "unchanged_rank_count": unchanged,
+                "rank_retention_rate": retention,
+                "mean_rank_deviation": mean_dev,
+            }
+        )
+
+    rows.sort(key=lambda item: (-float(item["rank_retention_rate"]), float(item["mean_rank_deviation"]), str(item["path_id"])))
+    return rows
+
+
+def score_marker_coverage_balance_v02(
+    scored_path: dict[str, Any],
+    expected_anchor_count: int | None = None,
+) -> dict[str, Any]:
+    active_cov = float(scored_path.get("active_marker_coverage", 0.0))
+    matched_anchors = len(scored_path.get("matched_anchors") or [])
+    matched_counters = len(scored_path.get("matched_counter_markers") or [])
+
+    if expected_anchor_count is not None and expected_anchor_count > 0:
+        anchor_ratio = min(1.0, matched_anchors / float(expected_anchor_count))
+    else:
+        anchor_ratio = 1.0 if matched_anchors > 0 else 0.0
+
+    counter_clean = max(0.0, 1.0 - (0.25 * matched_counters))
+    balance = _clamp01((0.45 * active_cov) + (0.30 * anchor_ratio) + (0.25 * counter_clean))
+
+    return {
+        "path_id": str(scored_path.get("path_id", "")),
+        "active_coverage": round(active_cov, 4),
+        "anchor_hit_ratio": round(anchor_ratio, 4),
+        "counter_clean_ratio": round(counter_clean, 4),
+        "marker_balance_score": balance,
+    }
+
+
 def compute_context_coverage_dispersion_v02(
     path_id: str,
     edges: list[dict[str, Any]],

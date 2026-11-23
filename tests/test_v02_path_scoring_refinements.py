@@ -14,6 +14,7 @@ from bioos.engine.path_ranking import (
     compare_path_scores_v02,
     compute_context_coverage_dispersion_v02,
     compute_context_field_coverage_v02,
+    compute_context_rank_stability_v02,
     compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
     compute_score_breakdown_shares_v02,
@@ -34,6 +35,7 @@ from bioos.engine.path_ranking import (
     rank_paths_with_context_v02,
     score_candidate_path_v02,
     score_conflict_context_tradeoff_v02,
+    score_marker_coverage_balance_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
     summarize_context_breadth_v02,
@@ -83,6 +85,12 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
     assert "bonuses" in ranked[0]["score_breakdown"]
 
+    balance = score_marker_coverage_balance_v02(ranked[0], expected_anchor_count=1)
+    assert balance["active_coverage"] == 1.0
+    assert balance["anchor_hit_ratio"] == 1.0
+    assert balance["counter_clean_ratio"] == 1.0
+    assert 0.0 <= balance["marker_balance_score"] <= 1.0
+
     cal = calibrate_conflict_adjusted_confidence_v02(ranked[0])
     assert cal["raw_confidence"] == ranked[0]["normalized_confidence"]
     assert cal["conflict_discount"] == 0.0
@@ -101,6 +109,28 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_context_rank_stability():
+    p_a = {
+        "path_id": "P_A",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    p_b = {
+        "path_id": "P_B",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Liver"}}],
+    }
+
+    stab = compute_context_rank_stability_v02(
+        candidates=[p_a, p_b],
+        baseline_context={"tissue": "Blood"},
+        perturbed_contexts=[{"tissue": "Blood"}, {"tissue": "Liver"}],
+    )
+    by_id = {row["path_id"]: row for row in stab}
+    assert by_id["P_A"]["perturbed_contexts_evaluated"] == 2
+    assert by_id["P_A"]["unchanged_rank_count"] == 1
+    assert by_id["P_A"]["rank_retention_rate"] == 0.5
+    assert by_id["P_A"]["mean_rank_deviation"] == 0.5
 
 
 def test_context_coverage_dispersion():
