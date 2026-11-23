@@ -13,6 +13,7 @@ from bioos.engine.path_ranking import (
     compare_context_rankings_v02,
     compare_path_scores_v02,
     compute_context_coverage_dispersion_v02,
+    compute_context_edge_support_density_v02,
     compute_context_field_coverage_v02,
     compute_context_rank_stability_v02,
     compute_context_specificity_v02,
@@ -28,6 +29,7 @@ from bioos.engine.path_ranking import (
     profile_context_field_sensitivity_v02,
     rank_contexts_for_path_v02,
     rank_differential_contexts_v02,
+    rank_conflict_free_consensus_v02,
     rank_paths_across_contexts_v02,
     rank_paths_by_consensus_v02,
     rank_paths_by_context_weighted_consensus_v02,
@@ -85,6 +87,16 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
     assert "bonuses" in ranked[0]["score_breakdown"]
 
+    density = compute_context_edge_support_density_v02(
+        path_id="P_FULL_CTX",
+        edges=full_ctx_path["edges"],
+        target_context={"tissue": "Blood", "cell_type": "Macrophage", "eco": "A"},
+    )
+    assert density["edge_count"] == 1
+    assert density["supported_edge_ratio"] == 1.0
+    assert density["context_matched_edge_ratio"] == 1.0
+    assert density["joint_support_density"] == 1.0
+
     balance = score_marker_coverage_balance_v02(ranked[0], expected_anchor_count=1)
     assert balance["active_coverage"] == 1.0
     assert balance["anchor_hit_ratio"] == 1.0
@@ -109,6 +121,23 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_conflict_free_consensus_ranking():
+    clean_p = {
+        "path_id": "P_CLEAN",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    conflict_p = {
+        "path_id": "P_CONFLICT",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Blood"}}],
+    }
+    ranked_clean = rank_conflict_free_consensus_v02(
+        candidates=[conflict_p, clean_p],
+        context_candidates=[{"context_id": "C1", "context": {"tissue": "Blood"}}],
+    )
+    assert [r["path_id"] for r in ranked_clean] == ["P_CLEAN"]
+    assert ranked_clean[0]["rank"] == 1
 
 
 def test_context_rank_stability():

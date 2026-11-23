@@ -256,6 +256,73 @@ def score_candidate_path_v02(
     }
 
 
+def compute_context_edge_support_density_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    attr = attribute_path_evidence_v02(edges=edges, target_context=target_context)
+    edge_count = int(attr.get("total_edges", 0))
+    supported = int(attr.get("supported_edges", 0))
+    ctx_matched = int(attr.get("context_matched_edges", 0))
+
+    if edge_count <= 0:
+        return {
+            "path_id": path_id,
+            "edge_count": 0,
+            "supported_edge_ratio": 0.0,
+            "context_matched_edge_ratio": 0.0,
+            "joint_support_density": 0.0,
+        }
+
+    sup_ratio = round(supported / edge_count, 4)
+    ctx_ratio = round(ctx_matched / edge_count, 4)
+    joint_density = round((sup_ratio + ctx_ratio) / 2.0, 4)
+
+    return {
+        "path_id": path_id,
+        "edge_count": edge_count,
+        "supported_edge_ratio": sup_ratio,
+        "context_matched_edge_ratio": ctx_ratio,
+        "joint_support_density": joint_density,
+    }
+
+
+def rank_conflict_free_consensus_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    consensus = rank_paths_by_consensus_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    clean_rows = [
+        dict(row)
+        for row in consensus
+        if int(row.get("contexts_evaluated", 0)) > 0
+        and int(row.get("zero_conflict_contexts", 0)) == int(row.get("contexts_evaluated", 0))
+    ]
+    clean_rows.sort(
+        key=lambda item: (
+            -float(item["mean_net_score"]),
+            -float(item["mean_normalized_confidence"]),
+            int(item["total_counter_hits"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(clean_rows, start=1):
+        item["rank"] = idx
+    return clean_rows
+
+
 def compute_context_rank_stability_v02(
     candidates: list[dict[str, Any]],
     baseline_context: dict[str, Any] | None,
