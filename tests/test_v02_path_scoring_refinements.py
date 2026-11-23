@@ -14,6 +14,8 @@ from bioos.engine.path_ranking import (
     compute_context_field_coverage_v02,
     compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
+    compute_score_breakdown_shares_v02,
+    evaluate_context_perturbation_stability_v02,
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
@@ -79,6 +81,11 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
     assert "bonuses" in ranked[0]["score_breakdown"]
 
+    shares = compute_score_breakdown_shares_v02(ranked[0])
+    assert shares["total_magnitude"] > 0.0
+    assert round(sum(shares["component_shares"].values()), 4) <= 1.0004
+    assert shares["dominant_component"] != "none"
+
     marker_contrib = attribute_marker_group_contributions_v02(ranked[0])
     assert marker_contrib["matched_anchor_count"] == 1
     assert marker_contrib["matched_active_count"] == 2
@@ -87,6 +94,27 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_context_perturbation_stability():
+    p_a = {
+        "path_id": "P_A",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    p_b = {
+        "path_id": "P_B",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Liver"}}],
+    }
+
+    stab = evaluate_context_perturbation_stability_v02(
+        candidates=[p_a, p_b],
+        baseline_context={"tissue": "Blood"},
+        perturbed_contexts=[{"tissue": "Blood"}, {"tissue": "Liver"}],
+    )
+    by_id = {row["path_id"]: row for row in stab}
+    assert by_id["P_A"]["perturbations_evaluated"] == 2
+    assert by_id["P_A"]["max_abs_score_swing"] > 0.0
+    assert 0.0 <= by_id["P_A"]["stability_index"] <= 1.0
 
 
 def test_context_pair_ranking_comparison():

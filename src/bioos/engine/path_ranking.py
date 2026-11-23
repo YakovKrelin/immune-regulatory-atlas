@@ -256,6 +256,103 @@ def score_candidate_path_v02(
     }
 
 
+def compute_score_breakdown_shares_v02(
+    scored_path: dict[str, Any],
+) -> dict[str, Any]:
+    components = {
+        "base_edge": float(scored_path.get("raw_score", 0.0)),
+        "anchor": float(scored_path.get("anchor_bonus", 0.0)),
+        "active_coverage": float(scored_path.get("active_coverage_bonus", 0.0)),
+        "context": float(scored_path.get("context_bonus", 0.0)),
+        "evidence": float(scored_path.get("evidence_bonus", 0.0)),
+        "sign": float(scored_path.get("sign_bonus", 0.0)),
+        "conflict_penalty": float(scored_path.get("conflict_penalty", 0.0)),
+        "counter_penalty": float(scored_path.get("counter_penalty", 0.0)),
+    }
+    magnitude = sum(abs(v) for v in components.values())
+    shares: dict[str, float] = {}
+    for key, val in components.items():
+        shares[key] = round(abs(val) / magnitude, 4) if magnitude > 0.0 else 0.0
+
+    dominant_component = max(shares.keys(), key=lambda k: (shares[k], k)) if magnitude > 0.0 else "none"
+    return {
+        "path_id": str(scored_path.get("path_id", "")),
+        "total_magnitude": round(magnitude, 4),
+        "component_shares": shares,
+        "dominant_component": dominant_component,
+    }
+
+
+def evaluate_context_perturbation_stability_v02(
+    candidates: list[dict[str, Any]],
+    baseline_context: dict[str, Any] | None,
+    perturbed_contexts: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    base_ranked = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=baseline_context,
+        weights=weights,
+    )
+    base_by_id = {str(r.get("path_id", "")): r for r in base_ranked if r.get("path_id")}
+
+    pert_rankings: list[dict[str, dict[str, Any]]] = []
+    for p_ctx in perturbed_contexts:
+        payload = p_ctx.get("context") if isinstance(p_ctx.get("context"), dict) else p_ctx
+        ranked_p = rank_paths_with_context_v02(
+            candidates=candidates,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=payload,
+            weights=weights,
+        )
+        pert_rankings.append({str(r.get("path_id", "")): r for r in ranked_p if r.get("path_id")})
+
+    results: list[dict[str, Any]] = []
+    for pid in sorted(base_by_id.keys()):
+        b_row = base_by_id[pid]
+        b_score = float(b_row.get("net_score", 0.0))
+        b_rank = int(b_row.get("rank", 0))
+
+        p_scores: list[float] = []
+        swings: list[float] = []
+        rank_changes = 0
+        for p_map in pert_rankings:
+            p_row = p_map.get(pid, {})
+            p_score = float(p_row.get("net_score", 0.0))
+            p_rank = int(p_row.get("rank", 0))
+            p_scores.append(p_score)
+            swings.append(abs(p_score - b_score))
+            if p_rank != b_rank:
+                rank_changes += 1
+
+        max_swing = round(max(swings), 4) if swings else 0.0
+        mean_p_score = round(sum(p_scores) / len(p_scores), 4) if p_scores else round(b_score, 4)
+        stability_index = round(max(0.0, 1.0 - max_swing), 4)
+
+        results.append(
+            {
+                "path_id": pid,
+                "perturbations_evaluated": len(pert_rankings),
+                "baseline_net_score": round(b_score, 4),
+                "mean_perturbed_score": mean_p_score,
+                "max_abs_score_swing": max_swing,
+                "rank_change_count": rank_changes,
+                "stability_index": stability_index,
+            }
+        )
+
+    results.sort(key=lambda item: (-float(item["stability_index"]), str(item["path_id"])))
+    return results
+
+
 def attribute_marker_group_contributions_v02(
     scored_path: dict[str, Any],
 ) -> dict[str, Any]:
