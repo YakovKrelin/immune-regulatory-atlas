@@ -33,6 +33,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    filter_consensus_by_stability_confidence_v02,
     filter_consensus_by_stability_v02,
     filter_consensus_by_thresholds_v02,
     gate_paths_by_required_context_v02,
@@ -59,6 +60,7 @@ from bioos.engine.path_ranking import (
     select_top_consensus_paths_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
+    summarize_consensus_rank_shifts_v02,
     summarize_consensus_stability_v02,
     summarize_context_breadth_v02,
     summarize_ranked_paths_v02,
@@ -141,6 +143,43 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_stability_filtered_confidence_and_shift_summary():
+    consensus_rows = [
+        {"path_id": "P_LOW_STAB", "mean_net_score": 2.0, "mean_normalized_confidence": 0.9},
+        {"path_id": "P_STRONG", "mean_net_score": 1.6, "mean_normalized_confidence": 0.8},
+    ]
+    stability_rows = [
+        {"path_id": "P_LOW_STAB", "consensus_retention_rate": 0.25, "max_rank_shift": 2},
+        {"path_id": "P_STRONG", "consensus_retention_rate": 1.0, "max_rank_shift": 0},
+    ]
+
+    filtered = filter_consensus_by_stability_confidence_v02(
+        consensus_rows=consensus_rows,
+        stability_rows=stability_rows,
+        min_stability_adjusted_confidence=0.5,
+        min_retention_rate=0.5,
+        max_rank_shift=1,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_STRONG"]
+    assert accepted[0]["stability_adjusted_confidence"] == 0.8
+    assert accepted[0]["rank"] == 1
+    assert [r["path_id"] for r in rejected] == ["P_LOW_STAB"]
+    assert "below_min_stability_adjusted_confidence" in rejected[0]["rejection_reasons"]
+    assert "below_min_retention_rate" in rejected[0]["rejection_reasons"]
+    assert "above_max_rank_shift" in rejected[0]["rejection_reasons"]
+
+    shift_summary = summarize_consensus_rank_shifts_v02(stability_rows)
+    assert shift_summary["candidate_count"] == 2
+    assert shift_summary["zero_shift_count"] == 1
+    assert shift_summary["min_max_rank_shift"] == 0
+    assert shift_summary["max_max_rank_shift"] == 2
+    assert shift_summary["rank_shift_spread"] == 2
+    assert shift_summary["mean_max_rank_shift"] == 1.0
 
 
 def test_consensus_stability_confidence_ranking_and_summary():

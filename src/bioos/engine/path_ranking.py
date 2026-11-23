@@ -256,6 +256,97 @@ def score_candidate_path_v02(
     }
 
 
+def filter_consensus_by_stability_confidence_v02(
+    consensus_rows: list[dict[str, Any]],
+    stability_rows: list[dict[str, Any]],
+    min_stability_adjusted_confidence: float = 0.0,
+    min_retention_rate: float = 0.0,
+    max_rank_shift: int | None = None,
+    include_rejected: bool = False,
+) -> list[dict[str, Any]]:
+    stab_by_id = {
+        str(item.get("path_id", "")): item
+        for item in stability_rows
+        if item.get("path_id")
+    }
+    passed: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+
+    for row in consensus_rows:
+        pid = str(row.get("path_id", ""))
+        s_item = stab_by_id.get(pid, {})
+        retention = float(s_item.get("consensus_retention_rate", 1.0))
+        shift = int(s_item.get("max_rank_shift", 0))
+        mean_conf = float(row.get("mean_normalized_confidence", 0.0))
+        stab_conf = _clamp01(mean_conf * retention)
+
+        reasons: list[str] = []
+        if stab_conf < float(min_stability_adjusted_confidence):
+            reasons.append("below_min_stability_adjusted_confidence")
+        if retention < float(min_retention_rate):
+            reasons.append("below_min_retention_rate")
+        if max_rank_shift is not None and shift > int(max_rank_shift):
+            reasons.append("above_max_rank_shift")
+
+        entry = dict(row)
+        entry["consensus_retention_rate"] = round(retention, 4)
+        entry["max_rank_shift"] = shift
+        entry["stability_adjusted_confidence"] = stab_conf
+
+        if not reasons:
+            entry["accepted"] = True
+            entry["rejection_reasons"] = []
+            passed.append(entry)
+        elif include_rejected:
+            entry["accepted"] = False
+            entry["rejection_reasons"] = reasons
+            rejected.append(entry)
+
+    passed.sort(
+        key=lambda item: (
+            -float(item.get("stability_adjusted_confidence", 0.0)),
+            -float(item.get("mean_net_score", 0.0)),
+            int(item.get("max_rank_shift", 0)),
+            str(item.get("path_id", "")),
+        )
+    )
+    for idx, item in enumerate(passed, start=1):
+        item["rank"] = idx
+
+    if include_rejected:
+        rejected.sort(key=lambda item: str(item.get("path_id", "")))
+        return passed + rejected
+    return passed
+
+
+def summarize_consensus_rank_shifts_v02(
+    stability_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not stability_rows:
+        return {
+            "candidate_count": 0,
+            "zero_shift_count": 0,
+            "mean_max_rank_shift": 0.0,
+            "min_max_rank_shift": 0,
+            "max_max_rank_shift": 0,
+            "rank_shift_spread": 0,
+        }
+
+    shifts = [int(r.get("max_rank_shift", 0)) for r in stability_rows]
+    n = len(stability_rows)
+    min_shift = min(shifts)
+    max_shift = max(shifts)
+
+    return {
+        "candidate_count": n,
+        "zero_shift_count": sum(1 for s in shifts if s == 0),
+        "mean_max_rank_shift": round(sum(shifts) / n, 4),
+        "min_max_rank_shift": min_shift,
+        "max_max_rank_shift": max_shift,
+        "rank_shift_spread": max_shift - min_shift,
+    }
+
+
 def rank_consensus_by_stability_confidence_v02(
     consensus_rows: list[dict[str, Any]],
     stability_rows: list[dict[str, Any]],
@@ -272,7 +363,6 @@ def rank_consensus_by_stability_confidence_v02(
         retention = float(s_item.get("consensus_retention_rate", 1.0))
         shift = int(s_item.get("max_rank_shift", 0))
         mean_conf = float(row.get("mean_normalized_confidence", 0.0))
-        mean_score = float(row.get("mean_net_score", 0.0))
         stab_conf = _clamp01(mean_conf * retention)
 
         entry = dict(row)
