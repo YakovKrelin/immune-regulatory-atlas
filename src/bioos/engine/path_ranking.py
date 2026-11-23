@@ -256,6 +256,81 @@ def score_candidate_path_v02(
     }
 
 
+def compute_context_coverage_dispersion_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, Any]:
+    coverages: list[float] = []
+    for ctx_item in context_candidates:
+        payload = ctx_item.get("context") if isinstance(ctx_item.get("context"), dict) else ctx_item
+        scored = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=payload,
+            weights=weights,
+        )
+        coverages.append(float(scored.get("context_coverage", 0.0)))
+
+    if not coverages:
+        return {
+            "path_id": path_id,
+            "contexts_evaluated": 0,
+            "min_coverage": 0.0,
+            "max_coverage": 0.0,
+            "coverage_range": 0.0,
+            "mean_coverage": 0.0,
+            "coverage_uniformity": 1.0,
+        }
+
+    min_cov = round(min(coverages), 4)
+    max_cov = round(max(coverages), 4)
+    cov_range = round(max_cov - min_cov, 4)
+    mean_cov = round(sum(coverages) / len(coverages), 4)
+    uniformity = round(max(0.0, 1.0 - cov_range), 4)
+
+    return {
+        "path_id": path_id,
+        "contexts_evaluated": len(coverages),
+        "min_coverage": min_cov,
+        "max_coverage": max_cov,
+        "coverage_range": cov_range,
+        "mean_coverage": mean_cov,
+        "coverage_uniformity": uniformity,
+    }
+
+
+def calibrate_conflict_adjusted_confidence_v02(
+    scored_path: dict[str, Any],
+    conflict_discount_weight: float = 0.15,
+    counter_discount_weight: float = 0.10,
+) -> dict[str, Any]:
+    raw_conf = float(scored_path.get("normalized_confidence", 0.0))
+    conflict_count = int(scored_path.get("conflict_count", 0))
+    res_ratio = float(scored_path.get("conflict_resolution_ratio", 1.0))
+    counter_hits = len(scored_path.get("matched_counter_markers") or [])
+
+    unresolved_factor = max(0.0, 1.0 - res_ratio) if conflict_count > 0 else 0.0
+    conflict_discount = round(conflict_count * float(conflict_discount_weight) * (1.0 + unresolved_factor), 4)
+    counter_discount = round(counter_hits * float(counter_discount_weight), 4)
+    calibrated = _clamp01(raw_conf - conflict_discount - counter_discount)
+
+    return {
+        "path_id": str(scored_path.get("path_id", "")),
+        "raw_confidence": round(raw_conf, 4),
+        "conflict_discount": conflict_discount,
+        "counter_discount": counter_discount,
+        "calibrated_confidence": calibrated,
+    }
+
+
 def compute_score_breakdown_shares_v02(
     scored_path: dict[str, Any],
 ) -> dict[str, Any]:

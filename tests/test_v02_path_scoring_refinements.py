@@ -8,9 +8,11 @@ from bioos.engine.path_ranking import (
     audit_path_rank_shifts_v02,
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
+    calibrate_conflict_adjusted_confidence_v02,
     classify_rank_margins_v02,
     compare_context_rankings_v02,
     compare_path_scores_v02,
+    compute_context_coverage_dispersion_v02,
     compute_context_field_coverage_v02,
     compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
@@ -81,6 +83,11 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
     assert "bonuses" in ranked[0]["score_breakdown"]
 
+    cal = calibrate_conflict_adjusted_confidence_v02(ranked[0])
+    assert cal["raw_confidence"] == ranked[0]["normalized_confidence"]
+    assert cal["conflict_discount"] == 0.0
+    assert 0.0 <= cal["calibrated_confidence"] <= 1.0
+
     shares = compute_score_breakdown_shares_v02(ranked[0])
     assert shares["total_magnitude"] > 0.0
     assert round(sum(shares["component_shares"].values()), 4) <= 1.0004
@@ -94,6 +101,25 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_context_coverage_dispersion():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
+    ]
+    disp = compute_context_coverage_dispersion_v02(
+        path_id="P_DISP",
+        edges=edges,
+        context_candidates=[
+            {"context_id": "C1", "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
+            {"context_id": "C2", "context": {"tissue": "Blood", "cell_type": "T Cell"}},
+        ],
+    )
+    assert disp["contexts_evaluated"] == 2
+    assert disp["min_coverage"] == 0.5
+    assert disp["max_coverage"] == 1.0
+    assert disp["coverage_range"] == 0.5
+    assert disp["coverage_uniformity"] == 0.5
 
 
 def test_context_perturbation_stability():
