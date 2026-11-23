@@ -454,6 +454,43 @@ def explain_path_ranking_v02(
     return explanation
 
 
+def classify_rank_margins_v02(
+    ranked_paths: list[dict[str, Any]],
+    narrow_threshold: float = 0.15,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    n = len(ranked_paths)
+    for idx, cur in enumerate(ranked_paths):
+        pid = str(cur.get("path_id", ""))
+        cur_score = float(cur.get("net_score", 0.0))
+        if idx + 1 < n:
+            nxt = ranked_paths[idx + 1]
+            nxt_score = float(nxt.get("net_score", 0.0))
+            margin = round(cur_score - nxt_score, 4)
+            if margin == 0.0:
+                status = "tied"
+            elif margin < float(narrow_threshold):
+                status = "narrow"
+            else:
+                status = "decisive"
+            next_id: str | None = str(nxt.get("path_id", ""))
+        else:
+            margin = None
+            status = "tail"
+            next_id = None
+
+        rows.append(
+            {
+                "path_id": pid,
+                "rank": int(cur.get("rank", idx + 1)),
+                "next_path_id": next_id,
+                "margin_to_next": margin,
+                "margin_class": status,
+            }
+        )
+    return rows
+
+
 def compare_path_scores_v02(
     primary_score: dict[str, Any],
     baseline_score: dict[str, Any],
@@ -492,6 +529,62 @@ def compare_path_scores_v02(
             4,
         ),
     }
+
+
+def audit_context_score_shifts_v02(
+    candidates: list[dict[str, Any]],
+    baseline_context: dict[str, Any] | None,
+    shifted_context: dict[str, Any] | None,
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    base_ranked = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=baseline_context,
+        weights=weights,
+    )
+    shifted_ranked = rank_paths_with_context_v02(
+        candidates=candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        target_context=shifted_context,
+        weights=weights,
+    )
+
+    base_by_id = {str(r.get("path_id", "")): r for r in base_ranked if r.get("path_id")}
+    shifted_by_id = {str(r.get("path_id", "")): r for r in shifted_ranked if r.get("path_id")}
+    all_ids = sorted(set(base_by_id.keys()) | set(shifted_by_id.keys()))
+
+    rows: list[dict[str, Any]] = []
+    for pid in all_ids:
+        b = base_by_id.get(pid, {})
+        s = shifted_by_id.get(pid, {})
+        b_score = float(b.get("net_score", 0.0))
+        s_score = float(s.get("net_score", 0.0))
+        b_ctx_bonus = float(b.get("context_bonus", 0.0))
+        s_ctx_bonus = float(s.get("context_bonus", 0.0))
+        b_cov = float(b.get("context_coverage", 0.0))
+        s_cov = float(s.get("context_coverage", 0.0))
+
+        rows.append(
+            {
+                "path_id": pid,
+                "baseline_net_score": round(b_score, 4),
+                "shifted_net_score": round(s_score, 4),
+                "delta_net_score": round(s_score - b_score, 4),
+                "delta_context_bonus": round(s_ctx_bonus - b_ctx_bonus, 4),
+                "context_coverage_delta": round(s_cov - b_cov, 4),
+            }
+        )
+
+    rows.sort(key=lambda item: (-abs(float(item["delta_net_score"])), str(item["path_id"])))
+    return rows
 
 
 def build_path_score_delta_matrix_v02(

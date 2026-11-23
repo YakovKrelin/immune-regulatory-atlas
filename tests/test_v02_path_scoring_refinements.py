@@ -3,9 +3,11 @@ from bioos.engine.path_ranking import (
     aggregate_weight_variant_consensus_v02,
     attach_snapshot_provenance,
     attribute_path_evidence_v02,
+    audit_context_score_shifts_v02,
     audit_path_rank_shifts_v02,
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
+    classify_rank_margins_v02,
     compare_path_scores_v02,
     compute_context_specificity_v02,
     compute_path_overlap_metrics_v02,
@@ -71,6 +73,10 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert 0.0 <= ranked[0]["normalized_confidence"] <= 1.0
     assert "bonuses" in ranked[0]["score_breakdown"]
 
+    margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
+    assert margins[0]["margin_class"] == "decisive"
+    assert margins[1]["margin_class"] == "tail"
+
 
 def test_sign_consistency_and_context_ranking():
     edges = [
@@ -106,7 +112,7 @@ def test_sign_consistency_and_context_ranking():
     assert diff_ctx[0]["differential_score"] > 0.0
 
 
-def test_context_specificity_against_background():
+def test_context_specificity_and_context_shift_audit():
     edges = [
         {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood", "cell_type": "Macrophage"}},
     ]
@@ -122,6 +128,15 @@ def test_context_specificity_against_background():
     assert spec["target_context_score"] > 0.0
     assert spec["mean_background_score"] == 0.0
     assert spec["specificity_delta"] > 0.0
+
+    shifts = audit_context_score_shifts_v02(
+        candidates=[{"path_id": "P_SPEC", "edges": edges}],
+        baseline_context={"tissue": "Blood", "cell_type": "Macrophage"},
+        shifted_context={"tissue": "Liver", "cell_type": "Hepatocyte"},
+    )
+    assert len(shifts) == 1
+    assert shifts[0]["delta_net_score"] < 0.0
+    assert shifts[0]["delta_context_bonus"] < 0.0
 
 
 def test_active_marker_coverage_and_context_agreement():
