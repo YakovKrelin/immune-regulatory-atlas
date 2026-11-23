@@ -6,6 +6,7 @@ from bioos.engine.path_ranking import (
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
     compare_path_scores_v02,
+    compute_path_overlap_metrics_v02,
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
@@ -17,6 +18,7 @@ from bioos.engine.path_ranking import (
     rank_paths_with_context_v02,
     score_candidate_path_v02,
     select_top_paths_v02,
+    serialize_ranked_paths_v02,
     summarize_ranked_paths_v02,
 )
 
@@ -215,6 +217,16 @@ def test_evidence_attribution_and_ranking_explanation():
     assert attr["context_matched_edges"] == 1
     assert attr["sign_counts"]["positive"] == 1
 
+    overlap = compute_path_overlap_metrics_v02(
+        edges_a,
+        active_markers=["TNF", "IL6", "STAT3"],
+        anchor_markers=["TNF", "IFNG"],
+        counter_markers=["IL10"],
+    )
+    assert overlap["active_jaccard"] > 0.0
+    assert overlap["unmatched_active_markers"] == ["STAT3"]
+    assert overlap["unmatched_anchor_markers"] == ["IFNG"]
+
     ranked = rank_paths_with_context_v02(
         candidates=[{"path_id": "P_B", "edges": edges_b}, {"path_id": "P_A", "edges": edges_a}],
         target_context={"tissue": "Blood"},
@@ -244,6 +256,10 @@ def test_top_k_selection_and_summary():
     top2 = select_top_paths_v02(ranked, top_k=2)
     assert len(top2) == 2
     assert [r["rank"] for r in top2] == [1, 2]
+
+    compact = serialize_ranked_paths_v02(top2, include_breakdown=True)
+    assert len(compact) == 2
+    assert "score_breakdown" in compact[0]
 
     tiers = partition_paths_by_confidence_tier_v02(ranked, high_threshold=0.70, moderate_threshold=0.40)
     assert len(tiers["high"]) + len(tiers["moderate"]) + len(tiers["low"]) == 3

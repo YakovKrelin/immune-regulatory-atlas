@@ -40,6 +40,13 @@ def _clamp01(value: float) -> float:
     return round(value, 4)
 
 
+def _jaccard(left: set[str], right: set[str]) -> float:
+    union = left | right
+    if not union:
+        return 0.0
+    return round(len(left & right) / len(union), 4)
+
+
 @dataclass(frozen=True)
 class PathScoringWeights:
     base_edge_score: float = 1.0
@@ -246,6 +253,35 @@ def score_candidate_path_v02(
         "net_score": net_score,
         "normalized_confidence": normalized_confidence,
         "score_breakdown": score_breakdown,
+    }
+
+
+def compute_path_overlap_metrics_v02(
+    edges: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+) -> dict[str, Any]:
+    path_tokens: set[str] = set()
+    for edge in edges:
+        subj = str(edge.get("subject", "")).strip().upper()
+        obj = str(edge.get("object", "")).strip().upper()
+        if subj:
+            path_tokens.add(subj)
+        if obj:
+            path_tokens.add(obj)
+
+    active = _norm_set(active_markers)
+    anchors = _norm_set(anchor_markers)
+    counters = _norm_set(counter_markers)
+
+    return {
+        "path_token_count": len(path_tokens),
+        "active_jaccard": _jaccard(path_tokens, active),
+        "anchor_jaccard": _jaccard(path_tokens, anchors),
+        "counter_jaccard": _jaccard(path_tokens, counters),
+        "unmatched_active_markers": sorted(active - path_tokens),
+        "unmatched_anchor_markers": sorted(anchors - path_tokens),
     }
 
 
@@ -698,6 +734,28 @@ def select_top_paths_v02(
     for idx, row in enumerate(sliced, start=1):
         row["rank"] = idx
     return sliced
+
+
+def serialize_ranked_paths_v02(
+    ranked_paths: list[dict[str, Any]],
+    include_breakdown: bool = False,
+) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for idx, row in enumerate(ranked_paths, start=1):
+        record: dict[str, Any] = {
+            "rank": int(row.get("rank", idx)),
+            "path_id": str(row.get("path_id", "")),
+            "net_score": round(float(row.get("net_score", 0.0)), 4),
+            "normalized_confidence": round(float(row.get("normalized_confidence", 0.0)), 4),
+            "conflict_count": int(row.get("conflict_count", 0)),
+            "context_coverage": round(float(row.get("context_coverage", 0.0)), 4),
+            "matched_active_markers": list(row.get("matched_active_markers") or []),
+            "matched_counter_markers": list(row.get("matched_counter_markers") or []),
+        }
+        if include_breakdown:
+            record["score_breakdown"] = row.get("score_breakdown", {})
+        serialized.append(record)
+    return serialized
 
 
 def evaluate_weight_sensitivity_v02(
