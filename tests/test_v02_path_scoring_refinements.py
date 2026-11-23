@@ -16,6 +16,7 @@ from bioos.engine.path_ranking import (
     compare_path_scores_v02,
     compute_conflict_aware_confidence_dispersion_v02,
     compute_consensus_rank_correlation_v02,
+    compute_consensus_rank_margins_v02,
     compute_consensus_rank_stability_v02,
     compute_context_coverage_dispersion_v02,
     compute_context_edge_support_density_v02,
@@ -52,6 +53,7 @@ from bioos.engine.path_ranking import (
     score_candidate_path_v02,
     score_conflict_context_tradeoff_v02,
     score_marker_coverage_balance_v02,
+    select_top_consensus_paths_v02,
     select_top_paths_v02,
     serialize_ranked_paths_v02,
     summarize_context_breadth_v02,
@@ -135,6 +137,33 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_consensus_rank_margins_and_top_k_selection():
+    p_blood = {
+        "path_id": "P_BLOOD",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    p_liver = {
+        "path_id": "P_LIVER",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Liver"}}],
+    }
+    ctx_blood = {"context_id": "C1", "context": {"tissue": "Blood"}}
+    ctx_liver = {"context_id": "C2", "context": {"tissue": "Liver"}}
+
+    consensus = rank_paths_by_consensus_v02(
+        candidates=[p_blood, p_liver],
+        context_candidates=[ctx_blood, ctx_liver],
+    )
+    margins = compute_consensus_rank_margins_v02(consensus, narrow_threshold=0.15)
+    assert len(margins) == 2
+    assert margins[0]["margin_class"] == "tied"
+    assert margins[0]["margin_to_next"] == 0.0
+    assert margins[1]["margin_class"] == "tail"
+
+    top1 = select_top_consensus_paths_v02(consensus, top_k=1)
+    assert len(top1) == 1
+    assert top1[0]["rank"] == 1
 
 
 def test_consensus_rank_correlation_and_envelope():

@@ -256,6 +256,54 @@ def score_candidate_path_v02(
     }
 
 
+def compute_consensus_rank_margins_v02(
+    consensus_rows: list[dict[str, Any]],
+    narrow_threshold: float = 0.15,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    n = len(consensus_rows)
+    for idx, cur in enumerate(consensus_rows):
+        pid = str(cur.get("path_id", ""))
+        cur_score = float(cur.get("mean_net_score", 0.0))
+        if idx + 1 < n:
+            nxt = consensus_rows[idx + 1]
+            nxt_score = float(nxt.get("mean_net_score", 0.0))
+            margin = round(cur_score - nxt_score, 4)
+            if margin == 0.0:
+                status = "tied"
+            elif margin < float(narrow_threshold):
+                status = "narrow"
+            else:
+                status = "decisive"
+            next_id: str | None = str(nxt.get("path_id", ""))
+        else:
+            margin = None
+            status = "tail"
+            next_id = None
+
+        rows.append(
+            {
+                "path_id": pid,
+                "rank": int(cur.get("rank", idx + 1)),
+                "next_path_id": next_id,
+                "margin_to_next": margin,
+                "margin_class": status,
+            }
+        )
+    return rows
+
+
+def select_top_consensus_paths_v02(
+    consensus_rows: list[dict[str, Any]],
+    top_k: int = 5,
+) -> list[dict[str, Any]]:
+    limit = max(1, int(top_k))
+    sliced = [dict(item) for item in consensus_rows[:limit]]
+    for idx, row in enumerate(sliced, start=1):
+        row["rank"] = idx
+    return sliced
+
+
 def compute_consensus_rank_correlation_v02(
     primary_ranked: list[dict[str, Any]],
     secondary_ranked: list[dict[str, Any]],
@@ -2572,4 +2620,3 @@ def build_ranked_hypothesis_payload_v02(
     )
     envelope["summary"] = summarize_ranked_paths_v02(ranked_paths)
     return envelope
-
