@@ -37,6 +37,7 @@ from bioos.engine.path_ranking import (
     filter_and_rank_paths_v02,
     filter_consensus_by_confidence_v02,
     filter_consensus_by_conflict_rate_v02,
+    filter_consensus_by_net_score_v02,
     filter_consensus_by_rank_shift_v02,
     filter_consensus_by_retention_v02,
     filter_consensus_by_stability_confidence_v02,
@@ -68,6 +69,7 @@ from bioos.engine.path_ranking import (
     serialize_ranked_paths_v02,
     summarize_consensus_confidence_cohorts_v02,
     summarize_consensus_conflict_cohorts_v02,
+    summarize_consensus_net_score_cohorts_v02,
     summarize_consensus_rank_shifts_v02,
     summarize_consensus_retention_cohorts_v02,
     summarize_consensus_retention_dispersion_v02,
@@ -153,6 +155,58 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_net_score_filtering_and_net_score_cohorts_summary():
+    consensus_rows = [
+        {
+            "path_id": "P_MOD",
+            "contexts_evaluated": 4,
+            "zero_conflict_contexts": 3,
+            "mean_net_score": 1.1,
+            "mean_normalized_confidence": 0.7,
+        },
+        {
+            "path_id": "P_STRONG",
+            "contexts_evaluated": 4,
+            "zero_conflict_contexts": 4,
+            "mean_net_score": 2.1,
+            "mean_normalized_confidence": 0.9,
+        },
+        {
+            "path_id": "P_WEAK",
+            "contexts_evaluated": 4,
+            "zero_conflict_contexts": 1,
+            "mean_net_score": 0.25,
+            "mean_normalized_confidence": 0.3,
+        },
+    ]
+
+    filtered = filter_consensus_by_net_score_v02(
+        consensus_rows=consensus_rows,
+        min_mean_net_score=1.0,
+        min_zero_conflict_contexts=3,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_STRONG", "P_MOD"]
+    assert [r["rank"] for r in accepted] == [1, 2]
+    assert [r["path_id"] for r in rejected] == ["P_WEAK"]
+    assert "below_min_mean_net_score" in rejected[0]["rejection_reasons"]
+    assert "below_min_zero_conflict_contexts" in rejected[0]["rejection_reasons"]
+
+    cohorts = summarize_consensus_net_score_cohorts_v02(consensus_rows)
+    assert cohorts["candidate_count"] == 3
+    assert cohorts["strong_score_count"] == 1
+    assert cohorts["moderate_score_count"] == 1
+    assert cohorts["weak_score_count"] == 1
+    assert (
+        cohorts["strong_score_share"]
+        + cohorts["moderate_score_share"]
+        + cohorts["weak_score_share"]
+        == pytest.approx(1.0, abs=1e-3)
+    )
 
 
 def test_confidence_filtering_and_confidence_cohorts_summary():
