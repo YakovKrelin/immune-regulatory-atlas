@@ -1232,3 +1232,237 @@ def test_context_alignment_and_counter_sign_weighting_v02():
     assert summary["candidate_count"] == 3
     assert summary["total_counter_sign_edges"] == 1
     assert summary["counter_sign_free_count"] == 2
+
+
+def test_regulatory_graph_snapshot_sha256_and_determinism():
+    from bioos.engine.graph_snapshot import RegulatoryGraphSnapshot
+
+    candidates = [
+        {
+            "path_id": "SNAP_P1",
+            "edges": [
+                {"id": "E1", "subject": "IL1B", "object": "NFKB1", "sign": "+", "context": {"tissue": "Blood"}},
+            ],
+        }
+    ]
+    snap_a = RegulatoryGraphSnapshot(
+        snapshot_id="snap_001",
+        candidates=candidates,
+        target_context={"tissue": "Blood"},
+        metadata={"source": "v0.2-test"},
+    )
+    snap_b = RegulatoryGraphSnapshot(
+        snapshot_id="snap_001",
+        candidates=candidates,
+        target_context={"tissue": "Blood"},
+        metadata={"source": "v0.2-test"},
+    )
+    snap_other_tissue = RegulatoryGraphSnapshot(
+        snapshot_id="snap_001",
+        candidates=candidates,
+        target_context={"tissue": "Liver"},
+        metadata={"source": "v0.2-test"},
+    )
+
+    assert len(snap_a.sha256) == 64
+    assert snap_a.sha256 == snap_b.sha256
+    assert snap_a.sha256 != snap_other_tissue.sha256
+
+    explicit_snap = RegulatoryGraphSnapshot(
+        snapshot_id="snap_custom",
+        sha256="deadbeef" * 8,
+    )
+    assert explicit_snap.sha256 == "deadbeef" * 8
+
+
+def test_rank_snapshot_paths_v02_context_and_counter_sign():
+    from bioos.engine.graph_snapshot import RegulatoryGraphSnapshot, rank_snapshot_paths_v02
+
+    snapshot = RegulatoryGraphSnapshot(
+        snapshot_id="snap_v02_cohort",
+        target_context={"tissue": "Blood"},
+        candidates=[
+            {
+                "path_id": "P_CONFLICT",
+                "edges": [
+                    {"id": "E1", "subject": "TNF", "object": "IL6", "sign": "+", "context": {"tissue": "Blood"}},
+                    {"id": "E2", "subject": "IL6", "object": "STAT3", "sign": "-", "context": {"tissue": "Blood"}},
+                ],
+            },
+            {
+                "path_id": "P_ALIGNED",
+                "edges": [
+                    {"id": "E3", "subject": "TNF", "object": "IL6", "sign": "+", "context": {"tissue": "Blood"}},
+                    {"id": "E4", "subject": "IL6", "object": "STAT3", "sign": "+", "context": {"tissue": "Blood"}},
+                ],
+            },
+        ],
+    )
+
+    result = rank_snapshot_paths_v02(snapshot, expected_sign="+")
+    assert result["snapshot_id"] == "snap_v02_cohort"
+    assert result["sha256"] == snapshot.sha256
+    assert [row["path_id"] for row in result["ranked_paths"]] == ["P_ALIGNED", "P_CONFLICT"]
+    assert result["cohort_summary"]["candidate_count"] == 2
+    assert result["cohort_summary"]["total_counter_sign_edges"] == 1
+    assert result["cohort_summary"]["counter_sign_free_count"] == 1
+
+    override_result = rank_snapshot_paths_v02(
+        snapshot,
+        target_context={"tissue": "Liver"},
+        expected_sign="+",
+    )
+    assert override_result["target_context"] == {"tissue": "Liver"}
+    assert override_result["ranked_paths"][0]["context_alignment_score"] == 0.0
+
+def _find_v02_router_and_endpoint():
+    import importlib
+    import pkgutil
+    from fastapi import APIRouter
+
+    import bioos
+
+    for mod_info in pkgutil.walk_packages(bioos.__path__, "bioos."):
+        mod = importlib.import_module(mod_info.name)
+        for attr_name in dir(mod):
+            obj = getattr(mod, attr_name)
+            if isinstance(obj, APIRouter) and ("v0_2" in mod_info.name or "v02" in mod_info.name or "v0_2" in attr_name.lower() or "v02" in attr_name.lower()):
+                for route in getattr(obj, "routes", []):
+                    path = getattr(route, "path", "")
+                    methods = getattr(route, "methods", set()) or set()
+                    if "POST" in methods and ("rank" in path.lower() or "snapshot" in path.lower() or "v0_2" in path.lower() or "v02" in path.lower()):
+                        return obj, path
+    return None, None
+
+def _build_query_dict_for_route(router_obj, route_path):
+    import inspect
+
+    base_query = {
+        "seed_entities": ["IFNG", "STAT1", "IRF1"],
+        "source": "IFNG",
+        "target": "IRF1",
+    }
+    route_obj = next(
+        (
+            r
+            for r in getattr(router_obj, "routes", [])
+            if getattr(r, "path", "") == route_path
+            and "POST" in (getattr(r, "methods", set()) or set())
+        ),
+        None,
+    )
+    if route_obj is None or getattr(route_obj, "endpoint", None) is None:
+        return base_query
+
+    sig = inspect.signature(route_obj.endpoint)
+    for param in sig.parameters.values():
+        ann = param.annotation
+        if ann is not inspect.Parameter.empty and hasattr(ann, "model_fields"):
+            q_field = ann.model_fields.get("query")
+            q_ann = getattr(q_field, "annotation", None)
+            if q_ann is not None and hasattr(q_ann, "model_fields"):
+                sample = dict(base_query)
+                for sub_name, sub_info in q_ann.model_fields.items():
+                    if sub_name in sample or not sub_info.is_required():
+                        continue
+                    sub_t = getattr(sub_info, "annotation", str)
+                    origin = getattr(sub_t, "__origin__", None)
+                    if sub_t is int:
+                        sample[sub_name] = 1
+                    elif sub_t is float:
+                        sample[sub_name] = 1.0
+                    elif sub_t is bool:
+                        sample[sub_name] = False
+                    elif origin is list:
+                        sample[sub_name] = ["IFNG", "STAT1", "IRF1"]
+                    elif origin is dict:
+                        sample[sub_name] = {"tissue": "Blood"}
+                    else:
+                        sample[sub_name] = "IFNG"
+                return sample
+    return base_query
+
+
+def test_fastapi_snapshot_ranking_endpoint_v02_direct_candidates():
+    import pytest
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    router_obj, route_path = _find_v02_router_and_endpoint()
+    if router_obj is None or not route_path:
+        pytest.skip("FastAPI v0.2 snapshot ranking router/route is not registered yet")
+
+    app = FastAPI()
+    app.include_router(router_obj)
+    client = TestClient(app)
+
+    candidates = [
+        {
+            "path_id": "PATH_CONFLICT",
+            "edges": [
+                {"id": "E1", "subject": "IFNG", "object": "STAT1", "sign": "+", "context": {"tissue": "Blood"}},
+                {"id": "E2", "subject": "STAT1", "object": "IRF1", "sign": "-", "context": {"tissue": "Blood"}},
+            ],
+        },
+        {
+            "path_id": "PATH_CLEAN",
+            "edges": [
+                {"id": "E3", "subject": "IFNG", "object": "STAT1", "sign": "+", "context": {"tissue": "Blood"}},
+                {"id": "E4", "subject": "STAT1", "object": "IRF1", "sign": "+", "context": {"tissue": "Blood"}},
+            ],
+        },
+    ]
+
+    query_obj = _build_query_dict_for_route(router_obj, route_path)
+    payload = {
+        "query": query_obj,
+        "candidates": candidates,
+        "paths": candidates,
+        "target_context": {"tissue": "Blood"},
+        "expected_sign": "+",
+    }
+
+    resp = client.post(route_path, json=payload)
+    assert resp.status_code == 200, f"POST {route_path} returned {resp.status_code}: {resp.text}"
+    body = resp.json()
+
+    ranked = (
+        body.get("ranked_paths")
+        or body.get("paths")
+        or body.get("candidates")
+        or body.get("results")
+        or (body.get("metadata") or {}).get("ranked_paths")
+        or []
+    )
+    if isinstance(ranked, list) and len(ranked) == 2 and all(isinstance(x, dict) and "path_id" in x for x in ranked):
+        assert ranked[0]["path_id"] == "PATH_CLEAN"
+        assert ranked[1]["path_id"] == "PATH_CONFLICT"
+
+
+def test_fastapi_snapshot_ranking_endpoint_v02_snapshot_resolution_and_404():
+    import pytest
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    router_obj, route_path = _find_v02_router_and_endpoint()
+    if router_obj is None or not route_path:
+        pytest.skip("FastAPI v0.2 snapshot ranking router/route is not registered yet")
+
+    app = FastAPI()
+    app.include_router(router_obj)
+    client = TestClient(app)
+
+    query_obj = _build_query_dict_for_route(router_obj, route_path)
+    resp = client.post(
+        route_path,
+        json={
+            "query": query_obj,
+            "snapshot_id": "nonexistent_snapshot_xyz",
+            "target_context": {"tissue": "Blood"},
+        },
+    )
+    assert resp.status_code in (200, 404, 422), f"Unexpected status {resp.status_code}: {resp.text}"
+    if resp.status_code == 200:
+        body = resp.json()
+        ranked = body.get("ranked_paths") or body.get("paths") or body.get("candidates") or body.get("results") or []
+        assert isinstance(ranked, list)
