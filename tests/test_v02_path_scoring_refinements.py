@@ -3,12 +3,14 @@ from bioos.engine.path_ranking import (
     attach_snapshot_provenance,
     attribute_path_evidence_v02,
     audit_path_rank_shifts_v02,
+    build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
     compare_path_scores_v02,
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
     group_ranked_paths_by_context_v02,
+    partition_paths_by_confidence_tier_v02,
     rank_contexts_for_path_v02,
     rank_paths_across_contexts_v02,
     rank_paths_by_consensus_v02,
@@ -155,6 +157,9 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     assert diff["delta_net_score"] > 0.0
     assert diff["delta_counter_penalty"] < 0.0
 
+    matrix = build_path_score_delta_matrix_v02([s_clean, s_counter])
+    assert len(matrix) == 2
+
 
 def test_filter_and_rank_paths_v02():
     clean_p = {
@@ -239,6 +244,9 @@ def test_top_k_selection_and_summary():
     top2 = select_top_paths_v02(ranked, top_k=2)
     assert len(top2) == 2
     assert [r["rank"] for r in top2] == [1, 2]
+
+    tiers = partition_paths_by_confidence_tier_v02(ranked, high_threshold=0.70, moderate_threshold=0.40)
+    assert len(tiers["high"]) + len(tiers["moderate"]) + len(tiers["low"]) == 3
 
     summary = summarize_ranked_paths_v02(ranked)
     assert summary["count"] == 3

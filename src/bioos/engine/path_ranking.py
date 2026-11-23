@@ -405,6 +405,44 @@ def compare_path_scores_v02(
     }
 
 
+def build_path_score_delta_matrix_v02(
+    scored_paths: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    pairs: list[dict[str, Any]] = []
+    n = len(scored_paths)
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                continue
+            pairs.append(compare_path_scores_v02(scored_paths[i], scored_paths[j]))
+    return pairs
+
+
+def partition_paths_by_confidence_tier_v02(
+    ranked_paths: list[dict[str, Any]],
+    high_threshold: float = 0.70,
+    moderate_threshold: float = 0.40,
+) -> dict[str, list[dict[str, Any]]]:
+    tiers: dict[str, list[dict[str, Any]]] = {
+        "high": [],
+        "moderate": [],
+        "low": [],
+    }
+    for item in ranked_paths:
+        conf = float(item.get("normalized_confidence", 0.0))
+        entry = dict(item)
+        if conf >= float(high_threshold):
+            entry["confidence_tier"] = "high"
+            tiers["high"].append(entry)
+        elif conf >= float(moderate_threshold):
+            entry["confidence_tier"] = "moderate"
+            tiers["moderate"].append(entry)
+        else:
+            entry["confidence_tier"] = "low"
+            tiers["low"].append(entry)
+    return tiers
+
+
 def rank_paths_with_context_v02(
     candidates: list[dict[str, Any]],
     active_markers: list[str] | set[str] | None = None,
