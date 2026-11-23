@@ -14,6 +14,23 @@ def _norm_str(value: Any) -> str:
     return str(value).strip().lower()
 
 
+def _norm_sign(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        if value > 0:
+            return 1
+        if value < 0:
+            return -1
+        return 0
+    raw = _norm_str(value)
+    if raw in {"+", "pos", "positive", "act", "activates", "activating", "up", "upregulates"}:
+        return 1
+    if raw in {"-", "neg", "negative", "inh", "inhibits", "inhibiting", "rep", "represses", "down", "downregulates"}:
+        return -1
+    return 0
+
+
 @dataclass(frozen=True)
 class PathScoringWeights:
     base_edge_score: float = 1.0
@@ -21,6 +38,7 @@ class PathScoringWeights:
     context_match_bonus: float = 0.20
     context_coverage_bonus: float = 0.35
     evidence_bonus_per_edge: float = 0.10
+    sign_consistency_bonus: float = 0.15
     conflict_penalty_per_edge: float = 0.45
     counter_penalty_per_hit: float = 0.30
 
@@ -52,6 +70,7 @@ def score_candidate_path_v02(
     matched_context_fields: set[str] = set()
     context_matches = 0
     supported_edges = 0
+    signs: list[int] = []
 
     for edge in edges:
         subj = str(edge.get("subject", "")).strip().upper()
@@ -60,6 +79,10 @@ def score_candidate_path_v02(
             path_tokens.add(subj)
         if obj:
             path_tokens.add(obj)
+
+        sign_val = _norm_sign(edge.get("sign") or edge.get("direction") or edge.get("polarity"))
+        if sign_val != 0:
+            signs.append(sign_val)
 
         edge_ctx = edge.get("context") if isinstance(edge.get("context"), dict) else edge
         for field in ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco"):
@@ -85,6 +108,20 @@ def score_candidate_path_v02(
         else 0.0
     )
 
+    sign_flips = 0
+    for i in range(1, len(signs)):
+        if signs[i] != signs[i - 1]:
+            sign_flips += 1
+
+    if len(signs) >= 2 and sign_flips == 0 and conflict_count == 0:
+        sign_consistency_score = 1.0
+    elif len(signs) >= 2:
+        sign_consistency_score = round(max(0.0, 1.0 - (sign_flips / (len(signs) - 1))), 4)
+    elif len(signs) == 1 and conflict_count == 0:
+        sign_consistency_score = 0.5
+    else:
+        sign_consistency_score = 0.0
+
     raw_score = edge_count * weights.base_edge_score
     anchor_bonus = round(len(matched_anchors) * weights.anchor_bonus_per_match, 4)
     context_bonus = round(
@@ -93,6 +130,7 @@ def score_candidate_path_v02(
         4,
     )
     evidence_bonus = round(supported_edges * weights.evidence_bonus_per_edge, 4)
+    sign_bonus = round(sign_consistency_score * weights.sign_consistency_bonus, 4)
     conflict_penalty = round(conflict_count * weights.conflict_penalty_per_edge, 4)
     counter_penalty = round(len(matched_counters) * weights.counter_penalty_per_hit, 4)
 
@@ -101,6 +139,7 @@ def score_candidate_path_v02(
         + anchor_bonus
         + context_bonus
         + evidence_bonus
+        + sign_bonus
         - conflict_penalty
         - counter_penalty,
         4,
@@ -116,10 +155,13 @@ def score_candidate_path_v02(
         "matched_context_fields": sorted(matched_context_fields),
         "context_coverage": context_coverage,
         "supported_edges": supported_edges,
+        "sign_consistency_score": sign_consistency_score,
+        "sign_flips": sign_flips,
         "raw_score": round(raw_score, 4),
         "anchor_bonus": anchor_bonus,
         "context_bonus": context_bonus,
         "evidence_bonus": evidence_bonus,
+        "sign_bonus": sign_bonus,
         "conflict_penalty": conflict_penalty,
         "counter_penalty": counter_penalty,
         "net_score": net_score,
@@ -160,6 +202,56 @@ def rank_paths_with_context_v02(
     for rank_idx, row in enumerate(scored, start=1):
         row["rank"] = rank_idx
     return scored
+
+
+def rank_contexts_for_path_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for idx, ctx_item in enumerate(context_candidates):
+        ctx_id = str(ctx_item.get("context_id") or f"ctx_{idx}")
+        ctx_payload = (
+            ctx_item.get("context")
+            if isinstance(ctx_item.get("context"), dict)
+            else ctx_item
+        )
+        scored = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=ctx_payload,
+            weights=weights,
+        )
+        rows.append(
+            {
+                "context_id": ctx_id,
+                "path_id": path_id,
+                "context": ctx_payload,
+                "context_score": scored["context_bonus"],
+                "context_coverage": scored["context_coverage"],
+                "matched_context_fields": scored["matched_context_fields"],
+                "net_score": scored["net_score"],
+            }
+        )
+
+    rows.sort(
+        key=lambda item: (
+            -float(item["context_score"]),
+            -float(item["context_coverage"]),
+            str(item["context_id"]),
+        )
+    )
+    for rank_idx, item in enumerate(rows, start=1):
+        item["rank"] = rank_idx
+    return rows
 
 
 def attach_snapshot_provenance(
