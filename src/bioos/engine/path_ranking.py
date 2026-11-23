@@ -457,6 +457,59 @@ def rank_paths_across_contexts_v02(
     return combined
 
 
+def rank_paths_by_consensus_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_path[str(row.get("path_id", ""))].append(row)
+
+    consensus_rows: list[dict[str, Any]] = []
+    for path_id, items in by_path.items():
+        n_ctx = len(items)
+        scores = [float(i.get("net_score", 0.0)) for i in items]
+        confs = [float(i.get("normalized_confidence", 0.0)) for i in items]
+        zero_conflict = sum(1 for i in items if int(i.get("conflict_count", 0)) == 0)
+        total_counter_hits = sum(len(i.get("matched_counter_markers") or []) for i in items)
+
+        consensus_rows.append(
+            {
+                "path_id": path_id,
+                "contexts_evaluated": n_ctx,
+                "zero_conflict_contexts": zero_conflict,
+                "total_counter_hits": total_counter_hits,
+                "mean_net_score": round(sum(scores) / max(1, n_ctx), 4),
+                "max_net_score": round(max(scores), 4) if scores else 0.0,
+                "mean_normalized_confidence": round(sum(confs) / max(1, n_ctx), 4),
+            }
+        )
+
+    consensus_rows.sort(
+        key=lambda item: (
+            -float(item["mean_net_score"]),
+            -int(item["zero_conflict_contexts"]),
+            int(item["total_counter_hits"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(consensus_rows, start=1):
+        item["rank"] = idx
+    return consensus_rows
+
+
 def group_ranked_paths_by_context_v02(
     ranked_rows: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -547,3 +600,17 @@ def attach_snapshot_provenance(
         if (snapshot_id or sha256)
         else None,
     }
+
+
+def build_ranked_hypothesis_payload_v02(
+    ranked_paths: list[dict[str, Any]],
+    snapshot_id: str | None = None,
+    sha256: str | None = None,
+) -> dict[str, Any]:
+    envelope = attach_snapshot_provenance(
+        ranked_paths=ranked_paths,
+        snapshot_id=snapshot_id,
+        sha256=sha256,
+    )
+    envelope["summary"] = summarize_ranked_paths_v02(ranked_paths)
+    return envelope

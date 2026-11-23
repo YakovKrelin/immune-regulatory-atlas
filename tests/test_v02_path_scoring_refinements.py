@@ -1,10 +1,12 @@
 from bioos.engine.path_ranking import (
     attach_snapshot_provenance,
+    build_ranked_hypothesis_payload_v02,
     compare_path_scores_v02,
     filter_and_rank_paths_v02,
     group_ranked_paths_by_context_v02,
     rank_contexts_for_path_v02,
     rank_paths_across_contexts_v02,
+    rank_paths_by_consensus_v02,
     rank_paths_with_context_v02,
     score_candidate_path_v02,
     select_top_paths_v02,
@@ -126,6 +128,18 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     assert ranked[0]["context_id"] == "CTX_BLOOD"
     assert ranked[0]["rank"] == 1
 
+    consensus = rank_paths_by_consensus_v02(
+        candidates=[path_counter, path_clean],
+        context_candidates=[
+            {"context_id": "CTX_BLOOD", "context": {"tissue": "Blood"}},
+            {"context_id": "CTX_LIVER", "context": {"tissue": "Liver"}},
+        ],
+        counter_markers=["IL10"],
+    )
+    assert consensus[0]["path_id"] == "P_CLEAN"
+    assert consensus[0]["contexts_evaluated"] == 2
+    assert consensus[0]["rank"] == 1
+
     grouped = group_ranked_paths_by_context_v02(ranked)
     assert sorted(grouped.keys()) == ["CTX_BLOOD", "CTX_LIVER"]
     assert grouped["CTX_BLOOD"][0]["context_rank"] == 1
@@ -182,3 +196,7 @@ def test_snapshot_provenance_envelope():
     env = attach_snapshot_provenance(sample, snapshot_id="snap_01", sha256="abc123")
     assert env["count"] == 1
     assert env["snapshot"] == {"snapshot_id": "snap_01", "sha256": "abc123"}
+
+    payload = build_ranked_hypothesis_payload_v02(sample, snapshot_id="snap_01", sha256="abc123")
+    assert payload["summary"]["count"] == 1
+    assert payload["snapshot"]["snapshot_id"] == "snap_01"
