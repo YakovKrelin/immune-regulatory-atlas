@@ -121,6 +121,12 @@ def score_candidate_path_v02(
         else 0.0
     )
 
+    conflict_resolution_ratio = (
+        1.0
+        if conflict_count == 0
+        else round(supported_edges / max(1, edge_count), 4)
+    )
+
     agreed_fields = 0
     populated_fields = 0
     for field in context_fields:
@@ -180,6 +186,7 @@ def score_candidate_path_v02(
         "path_id": path_id,
         "edge_count": edge_count,
         "conflict_count": conflict_count,
+        "conflict_resolution_ratio": conflict_resolution_ratio,
         "conflicting_edge_ids": [str(e.get("id", "")) for e in conflict_edges if e.get("id")],
         "matched_active_markers": matched_active,
         "active_marker_coverage": active_marker_coverage,
@@ -287,6 +294,50 @@ def rank_contexts_for_path_v02(
     for rank_idx, item in enumerate(rows, start=1):
         item["rank"] = rank_idx
     return rows
+
+
+def rank_paths_across_contexts_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    combined: list[dict[str, Any]] = []
+    for idx, ctx_item in enumerate(context_candidates):
+        ctx_id = str(ctx_item.get("context_id") or f"ctx_{idx}")
+        ctx_payload = (
+            ctx_item.get("context")
+            if isinstance(ctx_item.get("context"), dict)
+            else ctx_item
+        )
+        ranked_for_ctx = rank_paths_with_context_v02(
+            candidates=candidates,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=ctx_payload,
+            weights=weights,
+        )
+        for path_row in ranked_for_ctx:
+            enriched = dict(path_row)
+            enriched["context_id"] = ctx_id
+            enriched["target_context"] = ctx_payload
+            combined.append(enriched)
+
+    combined.sort(
+        key=lambda row: (
+            -float(row["net_score"]),
+            int(row["conflict_count"]),
+            len(row["matched_counter_markers"]),
+            str(row["context_id"]),
+            str(row["path_id"]),
+        )
+    )
+    for rank_idx, row in enumerate(combined, start=1):
+        row["rank"] = rank_idx
+    return combined
 
 
 def attach_snapshot_provenance(

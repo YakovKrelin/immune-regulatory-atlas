@@ -1,6 +1,7 @@
 from bioos.engine.path_ranking import (
     attach_snapshot_provenance,
     rank_contexts_for_path_v02,
+    rank_paths_across_contexts_v02,
     rank_paths_with_context_v02,
     score_candidate_path_v02,
 )
@@ -56,6 +57,7 @@ def test_sign_consistency_and_context_ranking():
     assert res["sign_consistency_score"] == 1.0
     assert res["sign_bonus"] > 0.0
     assert res["context_agreement_rate"] == 1.0
+    assert res["conflict_resolution_ratio"] == 1.0
 
     ctx_ranked = rank_contexts_for_path_v02(
         path_id="P_SIGN",
@@ -93,6 +95,29 @@ def test_active_marker_coverage_and_context_agreement():
     assert ranked[0]["active_marker_coverage"] == 1.0
     assert ranked[0]["context_agreement_rate"] == 1.0
     assert ranked[1]["context_agreement_rate"] == 0.0
+
+
+def test_counter_marker_penalty_and_multi_context_ranking():
+    path_clean = {
+        "path_id": "P_CLEAN",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+    path_counter = {
+        "path_id": "P_COUNTER",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL10", "conflict": False, "context": {"tissue": "Blood"}}],
+    }
+
+    ranked = rank_paths_across_contexts_v02(
+        candidates=[path_counter, path_clean],
+        context_candidates=[
+            {"context_id": "CTX_BLOOD", "context": {"tissue": "Blood"}},
+            {"context_id": "CTX_LIVER", "context": {"tissue": "Liver"}},
+        ],
+        counter_markers=["IL10"],
+    )
+    assert ranked[0]["path_id"] == "P_CLEAN"
+    assert ranked[0]["context_id"] == "CTX_BLOOD"
+    assert ranked[0]["rank"] == 1
 
 
 def test_snapshot_provenance_envelope():
