@@ -17,6 +17,7 @@ from bioos.engine.path_ranking import (
     compute_context_field_coverage_v02,
     compute_context_rank_stability_v02,
     compute_context_specificity_v02,
+    compute_path_confidence_dispersion_v02,
     compute_path_evidence_coverage_v02,
     compute_path_overlap_metrics_v02,
     compute_path_sign_polarity_coherence_v02,
@@ -29,6 +30,7 @@ from bioos.engine.path_ranking import (
     group_ranked_paths_by_context_v02,
     partition_paths_by_confidence_tier_v02,
     profile_context_field_sensitivity_v02,
+    rank_consensus_by_confidence_v02,
     rank_consensus_by_score_stability_v02,
     rank_consensus_with_conflict_penalty_v02,
     rank_contexts_for_path_v02,
@@ -125,6 +127,39 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_confidence_dispersion_and_confidence_weighted_consensus():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}},
+    ]
+    disp = compute_path_confidence_dispersion_v02(
+        path_id="P_CONF",
+        edges=edges,
+        context_candidates=[
+            {"context_id": "C1", "context": {"tissue": "Blood"}},
+            {"context_id": "C2", "context": {"tissue": "Liver"}},
+        ],
+    )
+    assert disp["contexts_evaluated"] == 2
+    assert disp["max_confidence"] >= disp["min_confidence"]
+    assert round(disp["max_confidence"] - disp["min_confidence"], 4) == disp["confidence_range"]
+    assert 0.0 <= disp["confidence_consistency"] <= 1.0
+
+    p_high = {
+        "path_id": "P_HIGH",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    p_low = {
+        "path_id": "P_LOW",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Liver"}}],
+    }
+    cw_ranked = rank_consensus_by_confidence_v02(
+        candidates=[p_low, p_high],
+        context_candidates=[{"context_id": "C1", "context": {"tissue": "Blood"}}],
+    )
+    assert [r["path_id"] for r in cw_ranked] == ["P_HIGH", "P_LOW"]
+    assert cw_ranked[0]["confidence_weighted_mean_score"] > cw_ranked[1]["confidence_weighted_mean_score"]
 
 
 def test_evidence_coverage_and_conflict_penalized_consensus_ranking():

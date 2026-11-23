@@ -256,6 +256,117 @@ def score_candidate_path_v02(
     }
 
 
+def compute_path_confidence_dispersion_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> dict[str, Any]:
+    confidences: list[float] = []
+    for ctx_item in context_candidates:
+        payload = ctx_item.get("context") if isinstance(ctx_item.get("context"), dict) else ctx_item
+        scored = score_candidate_path_v02(
+            path_id=path_id,
+            edges=edges,
+            active_markers=active_markers,
+            anchor_markers=anchor_markers,
+            counter_markers=counter_markers,
+            target_context=payload,
+            weights=weights,
+        )
+        confidences.append(float(scored.get("normalized_confidence", 0.0)))
+
+    if not confidences:
+        return {
+            "path_id": path_id,
+            "contexts_evaluated": 0,
+            "min_confidence": 0.0,
+            "max_confidence": 0.0,
+            "confidence_range": 0.0,
+            "mean_confidence": 0.0,
+            "confidence_consistency": 1.0,
+        }
+
+    min_conf = round(min(confidences), 4)
+    max_conf = round(max(confidences), 4)
+    conf_range = round(max_conf - min_conf, 4)
+    mean_conf = round(sum(confidences) / len(confidences), 4)
+    consistency = round(max(0.0, 1.0 - conf_range), 4)
+
+    return {
+        "path_id": path_id,
+        "contexts_evaluated": len(confidences),
+        "min_confidence": min_conf,
+        "max_confidence": max_conf,
+        "confidence_range": conf_range,
+        "mean_confidence": mean_conf,
+        "confidence_consistency": consistency,
+    }
+
+
+def rank_consensus_by_confidence_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        pid = str(row.get("path_id", ""))
+        if pid:
+            by_path[pid].append(row)
+
+    ranked_rows: list[dict[str, Any]] = []
+    for pid, items in by_path.items():
+        n_ctx = len(items)
+        scores = [float(i.get("net_score", 0.0)) for i in items]
+        confs = [float(i.get("normalized_confidence", 0.0)) for i in items]
+        mean_score = round(sum(scores) / max(1, n_ctx), 4)
+        mean_conf = round(sum(confs) / max(1, n_ctx), 4)
+        conf_sum = sum(confs)
+        if conf_sum > 0.0:
+            cw_score = round(sum(s * c for s, c in zip(scores, confs)) / conf_sum, 4)
+        else:
+            cw_score = mean_score
+        zero_conflict = sum(1 for i in items if int(i.get("conflict_count", 0)) == 0)
+
+        ranked_rows.append(
+            {
+                "path_id": pid,
+                "contexts_evaluated": n_ctx,
+                "zero_conflict_contexts": zero_conflict,
+                "mean_net_score": mean_score,
+                "mean_normalized_confidence": mean_conf,
+                "confidence_weighted_mean_score": cw_score,
+            }
+        )
+
+    ranked_rows.sort(
+        key=lambda item: (
+            -float(item["confidence_weighted_mean_score"]),
+            -float(item["mean_normalized_confidence"]),
+            -int(item["zero_conflict_contexts"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(ranked_rows, start=1):
+        item["rank"] = idx
+    return ranked_rows
+
+
 def compute_path_evidence_coverage_v02(
     path_id: str,
     edges: list[dict[str, Any]],
