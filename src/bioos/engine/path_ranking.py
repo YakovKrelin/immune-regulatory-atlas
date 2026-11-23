@@ -419,6 +419,56 @@ def rank_paths_across_contexts_v02(
     return combined
 
 
+def select_top_paths_v02(
+    ranked_paths: list[dict[str, Any]],
+    top_k: int = 5,
+) -> list[dict[str, Any]]:
+    limit = max(1, int(top_k))
+    sliced = [dict(item) for item in ranked_paths[:limit]]
+    for idx, row in enumerate(sliced, start=1):
+        row["rank"] = idx
+    return sliced
+
+
+def summarize_ranked_paths_v02(
+    ranked_paths: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not ranked_paths:
+        return {
+            "count": 0,
+            "top_path_id": None,
+            "top_net_score": 0.0,
+            "mean_net_score": 0.0,
+            "mean_normalized_confidence": 0.0,
+            "total_conflicts": 0,
+            "common_context_fields": [],
+        }
+
+    count = len(ranked_paths)
+    net_scores = [float(item.get("net_score", 0.0)) for item in ranked_paths]
+    confidences = [float(item.get("normalized_confidence", 0.0)) for item in ranked_paths]
+    total_conflicts = sum(int(item.get("conflict_count", 0)) for item in ranked_paths)
+
+    field_counts: Counter[str] = Counter()
+    for item in ranked_paths:
+        for field in item.get("matched_context_fields") or []:
+            field_counts[str(field)] += 1
+
+    common_fields = sorted(
+        field for field, freq in field_counts.items() if freq == count
+    )
+
+    return {
+        "count": count,
+        "top_path_id": ranked_paths[0].get("path_id"),
+        "top_net_score": round(net_scores[0], 4),
+        "mean_net_score": round(sum(net_scores) / count, 4),
+        "mean_normalized_confidence": round(sum(confidences) / count, 4),
+        "total_conflicts": total_conflicts,
+        "common_context_fields": common_fields,
+    }
+
+
 def attach_snapshot_provenance(
     ranked_paths: list[dict[str, Any]],
     snapshot_id: str | None = None,

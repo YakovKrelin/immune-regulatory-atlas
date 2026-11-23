@@ -5,6 +5,8 @@ from bioos.engine.path_ranking import (
     rank_paths_across_contexts_v02,
     rank_paths_with_context_v02,
     score_candidate_path_v02,
+    select_top_paths_v02,
+    summarize_ranked_paths_v02,
 )
 
 
@@ -127,6 +129,26 @@ def test_counter_marker_penalty_and_multi_context_ranking():
     diff = compare_path_scores_v02(s_clean, s_counter)
     assert diff["delta_net_score"] > 0.0
     assert diff["delta_counter_penalty"] < 0.0
+
+
+def test_top_k_selection_and_summary():
+    p1 = {"path_id": "P1", "edges": [{"id": "E1", "subject": "A", "object": "B", "context": {"tissue": "Blood"}}]}
+    p2 = {"path_id": "P2", "edges": [{"id": "E2", "subject": "B", "object": "C", "context": {"tissue": "Blood"}}]}
+    p3 = {"path_id": "P3", "edges": [{"id": "E3", "subject": "C", "object": "D", "context": {"tissue": "Blood"}}]}
+
+    ranked = rank_paths_with_context_v02(
+        candidates=[p3, p1, p2],
+        target_context={"tissue": "Blood"},
+    )
+    top2 = select_top_paths_v02(ranked, top_k=2)
+    assert len(top2) == 2
+    assert [r["rank"] for r in top2] == [1, 2]
+
+    summary = summarize_ranked_paths_v02(ranked)
+    assert summary["count"] == 3
+    assert summary["top_path_id"] == ranked[0]["path_id"]
+    assert summary["total_conflicts"] == 0
+    assert summary["common_context_fields"] == ["tissue"]
 
 
 def test_snapshot_provenance_envelope():
