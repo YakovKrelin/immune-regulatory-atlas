@@ -7,6 +7,7 @@ from bioos.engine.path_ranking import (
     audit_context_score_shifts_v02,
     audit_path_rank_shifts_v02,
     build_consensus_report_v02,
+    build_context_consensus_envelope_v02,
     build_path_score_delta_matrix_v02,
     build_ranked_hypothesis_payload_v02,
     calibrate_conflict_adjusted_confidence_v02,
@@ -14,6 +15,7 @@ from bioos.engine.path_ranking import (
     compare_context_rankings_v02,
     compare_path_scores_v02,
     compute_conflict_aware_confidence_dispersion_v02,
+    compute_consensus_rank_correlation_v02,
     compute_consensus_rank_stability_v02,
     compute_context_coverage_dispersion_v02,
     compute_context_edge_support_density_v02,
@@ -133,6 +135,49 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_consensus_rank_correlation_and_envelope():
+    p_blood = {
+        "path_id": "P_BLOOD",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    p_liver = {
+        "path_id": "P_LIVER",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Liver"}}],
+    }
+    ctx_blood = {"context_id": "C1", "context": {"tissue": "Blood"}}
+    ctx_liver = {"context_id": "C2", "context": {"tissue": "Liver"}}
+
+    primary = rank_paths_by_consensus_v02(
+        candidates=[p_blood, p_liver],
+        context_candidates=[ctx_blood, ctx_liver],
+    )
+    secondary = rank_consensus_by_confidence_v02(
+        candidates=[p_blood, p_liver],
+        context_candidates=[ctx_blood, ctx_liver],
+    )
+
+    corr = compute_consensus_rank_correlation_v02(primary, secondary)
+    assert corr["shared_path_count"] == 2
+    assert corr["max_abs_rank_shift"] >= 0
+    assert 0.0 <= corr["exact_rank_agreement_rate"] <= 1.0
+    assert 0.0 <= corr["rank_alignment_score"] <= 1.0
+
+    stability = compute_consensus_rank_stability_v02(
+        candidates=[p_blood, p_liver],
+        context_subsets=[[ctx_blood], [ctx_liver]],
+        baseline_contexts=[ctx_blood, ctx_liver],
+    )
+    envelope = build_context_consensus_envelope_v02(
+        consensus_rows=primary,
+        stability_rows=stability,
+        snapshot_id="snap_v02",
+        sha256="deadbeef",
+    )
+    assert envelope["summary"]["candidate_count"] == 2
+    assert len(envelope["stability_diagnostics"]) == 2
+    assert envelope["snapshot"] == {"snapshot_id": "snap_v02", "sha256": "deadbeef"}
 
 
 def test_consensus_report_and_subset_rank_stability():

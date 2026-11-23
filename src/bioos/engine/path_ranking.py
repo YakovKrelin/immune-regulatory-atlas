@@ -256,6 +256,79 @@ def score_candidate_path_v02(
     }
 
 
+def compute_consensus_rank_correlation_v02(
+    primary_ranked: list[dict[str, Any]],
+    secondary_ranked: list[dict[str, Any]],
+) -> dict[str, Any]:
+    primary_map = {
+        str(r.get("path_id", "")): int(r.get("rank", idx))
+        for idx, r in enumerate(primary_ranked, start=1)
+        if r.get("path_id")
+    }
+    secondary_map = {
+        str(r.get("path_id", "")): int(r.get("rank", idx))
+        for idx, r in enumerate(secondary_ranked, start=1)
+        if r.get("path_id")
+    }
+
+    shared_ids = sorted(set(primary_map.keys()) & set(secondary_map.keys()))
+    if not shared_ids:
+        return {
+            "shared_path_count": 0,
+            "mean_abs_rank_shift": 0.0,
+            "max_abs_rank_shift": 0,
+            "exact_rank_agreement_rate": 0.0,
+            "rank_alignment_score": 0.0,
+        }
+
+    shifts = [abs(primary_map[pid] - secondary_map[pid]) for pid in shared_ids]
+    exact_matches = sum(1 for s in shifts if s == 0)
+    mean_shift = round(sum(shifts) / len(shared_ids), 4)
+    max_shift = max(shifts)
+    exact_rate = round(exact_matches / len(shared_ids), 4)
+    denom = max(1, len(shared_ids) - 1)
+    alignment = _clamp01(1.0 - (mean_shift / denom))
+
+    return {
+        "shared_path_count": len(shared_ids),
+        "mean_abs_rank_shift": mean_shift,
+        "max_abs_rank_shift": max_shift,
+        "exact_rank_agreement_rate": exact_rate,
+        "rank_alignment_score": alignment,
+    }
+
+
+def build_context_consensus_envelope_v02(
+    consensus_rows: list[dict[str, Any]],
+    stability_rows: list[dict[str, Any]] | None = None,
+    snapshot_id: str | None = None,
+    sha256: str | None = None,
+) -> dict[str, Any]:
+    scores = [float(row.get("mean_net_score", 0.0)) for row in consensus_rows]
+    confs = [float(row.get("mean_normalized_confidence", 0.0)) for row in consensus_rows]
+    zero_conflict_total = sum(int(row.get("zero_conflict_contexts", 0)) for row in consensus_rows)
+
+    summary = {
+        "candidate_count": len(consensus_rows),
+        "top_path_id": consensus_rows[0].get("path_id") if consensus_rows else None,
+        "mean_consensus_net_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
+        "mean_consensus_confidence": round(sum(confs) / len(confs), 4) if confs else 0.0,
+        "total_zero_conflict_contexts": zero_conflict_total,
+    }
+
+    return {
+        "consensus_paths": consensus_rows,
+        "stability_diagnostics": stability_rows or [],
+        "summary": summary,
+        "snapshot": {
+            "snapshot_id": snapshot_id,
+            "sha256": sha256,
+        }
+        if (snapshot_id or sha256)
+        else None,
+    }
+
+
 def build_consensus_report_v02(
     consensus_rows: list[dict[str, Any]],
     min_mean_net_score: float | None = None,
@@ -2499,3 +2572,4 @@ def build_ranked_hypothesis_payload_v02(
     )
     envelope["summary"] = summarize_ranked_paths_v02(ranked_paths)
     return envelope
+
