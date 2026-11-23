@@ -18,6 +18,7 @@ from bioos.engine.path_ranking import (
     compute_context_rank_stability_v02,
     compute_context_specificity_v02,
     compute_path_confidence_dispersion_v02,
+    compute_path_conflict_intensity_v02,
     compute_path_evidence_coverage_v02,
     compute_path_overlap_metrics_v02,
     compute_path_sign_polarity_coherence_v02,
@@ -31,6 +32,7 @@ from bioos.engine.path_ranking import (
     partition_paths_by_confidence_tier_v02,
     profile_context_field_sensitivity_v02,
     rank_consensus_by_confidence_v02,
+    rank_consensus_by_conflict_aware_confidence_v02,
     rank_consensus_by_score_stability_v02,
     rank_consensus_with_conflict_penalty_v02,
     rank_contexts_for_path_v02,
@@ -129,6 +131,34 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     assert margins[1]["margin_class"] == "tail"
 
 
+def test_conflict_intensity_and_conflict_aware_confidence_consensus():
+    edges = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9},
+        {"id": "E2", "subject": "IL6", "object": "CRP", "conflict": True, "evidence_score": 0.4},
+    ]
+    intensity = compute_path_conflict_intensity_v02(path_id="P_CI", edges=edges)
+    assert intensity["edge_count"] == 2
+    assert intensity["conflict_edge_count"] == 1
+    assert intensity["conflict_edge_ratio"] == 0.5
+    assert intensity["conflict_resilience_index"] == 0.5
+    assert 0.0 <= intensity["conflicted_support_ratio"] <= 1.0
+
+    p_clean = {
+        "path_id": "P_CLEAN",
+        "edges": [{"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    p_conflicted = {
+        "path_id": "P_CONFLICTED",
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "evidence_score": 0.9, "context": {"tissue": "Blood"}}],
+    }
+    ranked = rank_consensus_by_conflict_aware_confidence_v02(
+        candidates=[p_conflicted, p_clean],
+        context_candidates=[{"context_id": "C1", "context": {"tissue": "Blood"}}],
+    )
+    assert [r["path_id"] for r in ranked] == ["P_CLEAN", "P_CONFLICTED"]
+    assert ranked[0]["conflict_aware_confidence_score"] > ranked[1]["conflict_aware_confidence_score"]
+
+
 def test_confidence_dispersion_and_confidence_weighted_consensus():
     edges = [
         {"id": "E1", "subject": "TNF", "object": "IL6", "conflict": False, "evidence_score": 0.9, "context": {"tissue": "Blood"}},
@@ -152,7 +182,7 @@ def test_confidence_dispersion_and_confidence_weighted_consensus():
     }
     p_low = {
         "path_id": "P_LOW",
-        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "context": {"tissue": "Liver"}}],
+        "edges": [{"id": "E2", "subject": "TNF", "object": "IL6", "conflict": True, "evidence_score": 0.9, "context": {"tissue": "Liver"}}],
     }
     cw_ranked = rank_consensus_by_confidence_v02(
         candidates=[p_low, p_high],

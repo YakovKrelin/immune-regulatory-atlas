@@ -256,6 +256,102 @@ def score_candidate_path_v02(
     }
 
 
+def compute_path_conflict_intensity_v02(
+    path_id: str,
+    edges: list[dict[str, Any]],
+) -> dict[str, Any]:
+    attr = attribute_path_evidence_v02(edges=edges)
+    total = int(attr.get("total_edges", 0))
+    clean = int(attr.get("conflict_free_edges", 0))
+    supported = int(attr.get("supported_edges", 0))
+    conflict_edges = max(0, total - clean)
+
+    if total <= 0:
+        return {
+            "path_id": path_id,
+            "edge_count": 0,
+            "conflict_edge_count": 0,
+            "conflict_edge_ratio": 0.0,
+            "conflicted_support_ratio": 0.0,
+            "conflict_resilience_index": 1.0,
+        }
+
+    conflict_ratio = round(conflict_edges / total, 4)
+    resilience = round(max(0.0, 1.0 - conflict_ratio), 4)
+    if conflict_edges > 0:
+        conflicted_sup_ratio = round(min(1.0, supported / conflict_edges), 4)
+    else:
+        conflicted_sup_ratio = 1.0
+
+    return {
+        "path_id": path_id,
+        "edge_count": total,
+        "conflict_edge_count": conflict_edges,
+        "conflict_edge_ratio": conflict_ratio,
+        "conflicted_support_ratio": conflicted_sup_ratio,
+        "conflict_resilience_index": resilience,
+    }
+
+
+def rank_consensus_by_conflict_aware_confidence_v02(
+    candidates: list[dict[str, Any]],
+    context_candidates: list[dict[str, Any]],
+    active_markers: list[str] | set[str] | None = None,
+    anchor_markers: list[str] | set[str] | None = None,
+    counter_markers: list[str] | set[str] | None = None,
+    weights: PathScoringWeights = PathScoringWeights(),
+) -> list[dict[str, Any]]:
+    rows = rank_paths_across_contexts_v02(
+        candidates=candidates,
+        context_candidates=context_candidates,
+        active_markers=active_markers,
+        anchor_markers=anchor_markers,
+        counter_markers=counter_markers,
+        weights=weights,
+    )
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        pid = str(row.get("path_id", ""))
+        if pid:
+            by_path[pid].append(row)
+
+    ranked_rows: list[dict[str, Any]] = []
+    for pid, items in by_path.items():
+        n_ctx = len(items)
+        scores = [float(i.get("net_score", 0.0)) for i in items]
+        confs = [float(i.get("normalized_confidence", 0.0)) for i in items]
+        zero_conflict = sum(1 for i in items if int(i.get("conflict_count", 0)) == 0)
+        conflicted_ctx = n_ctx - zero_conflict
+        conflict_rate = round(conflicted_ctx / max(1, n_ctx), 4)
+        mean_score = round(sum(scores) / max(1, n_ctx), 4)
+        mean_conf = round(sum(confs) / max(1, n_ctx), 4)
+        aware_conf = _clamp01(mean_conf * max(0.0, 1.0 - conflict_rate))
+
+        ranked_rows.append(
+            {
+                "path_id": pid,
+                "contexts_evaluated": n_ctx,
+                "zero_conflict_contexts": zero_conflict,
+                "conflict_rate": conflict_rate,
+                "mean_net_score": mean_score,
+                "mean_normalized_confidence": mean_conf,
+                "conflict_aware_confidence_score": aware_conf,
+            }
+        )
+
+    ranked_rows.sort(
+        key=lambda item: (
+            -float(item["conflict_aware_confidence_score"]),
+            -float(item["mean_net_score"]),
+            -int(item["zero_conflict_contexts"]),
+            str(item["path_id"]),
+        )
+    )
+    for idx, item in enumerate(ranked_rows, start=1):
+        item["rank"] = idx
+    return ranked_rows
+
+
 def compute_path_confidence_dispersion_v02(
     path_id: str,
     edges: list[dict[str, Any]],
