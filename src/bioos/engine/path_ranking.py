@@ -265,6 +265,86 @@ def score_candidate_path_v02(
     }
 
 
+def filter_consensus_by_confidence_v02(
+    consensus_rows: list[dict[str, Any]],
+    min_mean_normalized_confidence: float = 0.0,
+    min_zero_conflict_contexts: int = 0,
+    include_rejected: bool = False,
+) -> list[dict[str, Any]]:
+    passed: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+
+    for row in consensus_rows:
+        mean_conf = float(row.get("mean_normalized_confidence", 0.0))
+        zero_conflict = int(row.get("zero_conflict_contexts", 0))
+
+        reasons: list[str] = []
+        if mean_conf < float(min_mean_normalized_confidence):
+            reasons.append("below_min_mean_normalized_confidence")
+        if zero_conflict < int(min_zero_conflict_contexts):
+            reasons.append("below_min_zero_conflict_contexts")
+
+        entry = dict(row)
+        entry["mean_normalized_confidence"] = round(mean_conf, 4)
+        entry["zero_conflict_contexts"] = zero_conflict
+
+        if not reasons:
+            entry["accepted"] = True
+            entry["rejection_reasons"] = []
+            passed.append(entry)
+        elif include_rejected:
+            entry["accepted"] = False
+            entry["rejection_reasons"] = reasons
+            rejected.append(entry)
+
+    passed.sort(
+        key=lambda item: (
+            -float(item.get("mean_normalized_confidence", 0.0)),
+            -float(item.get("mean_net_score", 0.0)),
+            -int(item.get("zero_conflict_contexts", 0)),
+            str(item.get("path_id", "")),
+        )
+    )
+    for idx, item in enumerate(passed, start=1):
+        item["rank"] = idx
+
+    if include_rejected:
+        rejected.sort(key=lambda item: str(item.get("path_id", "")))
+        return passed + rejected
+    return passed
+
+
+def summarize_consensus_confidence_cohorts_v02(
+    consensus_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not consensus_rows:
+        return {
+            "candidate_count": 0,
+            "high_confidence_count": 0,
+            "moderate_confidence_count": 0,
+            "low_confidence_count": 0,
+            "high_confidence_share": 0.0,
+            "moderate_confidence_share": 0.0,
+            "low_confidence_share": 0.0,
+        }
+
+    confs = [float(r.get("mean_normalized_confidence", 0.0)) for r in consensus_rows]
+    n = len(confs)
+    high_cnt = sum(1 for val in confs if val >= 0.70)
+    mod_cnt = sum(1 for val in confs if 0.40 <= val < 0.70)
+    low_cnt = sum(1 for val in confs if val < 0.40)
+
+    return {
+        "candidate_count": n,
+        "high_confidence_count": high_cnt,
+        "moderate_confidence_count": mod_cnt,
+        "low_confidence_count": low_cnt,
+        "high_confidence_share": round(high_cnt / n, 4),
+        "moderate_confidence_share": round(mod_cnt / n, 4),
+        "low_confidence_share": round(low_cnt / n, 4),
+    }
+
+
 def filter_consensus_by_conflict_rate_v02(
     consensus_rows: list[dict[str, Any]],
     max_conflict_rate: float = 1.0,
