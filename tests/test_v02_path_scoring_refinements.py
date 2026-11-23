@@ -1,10 +1,12 @@
 from bioos.engine.path_ranking import (
     PathScoringWeights,
     attach_snapshot_provenance,
+    attribute_path_evidence_v02,
     audit_path_rank_shifts_v02,
     build_ranked_hypothesis_payload_v02,
     compare_path_scores_v02,
     evaluate_weight_sensitivity_v02,
+    explain_path_ranking_v02,
     filter_and_rank_paths_v02,
     group_ranked_paths_by_context_v02,
     rank_contexts_for_path_v02,
@@ -193,6 +195,36 @@ def test_weight_sensitivity_and_rank_shifts():
     by_id = {row["path_id"]: row for row in shifts}
     assert by_id["P_CTX"]["perturbed_rank"] == 1
     assert by_id["P_CTX"]["delta_net_score"] > 0.0
+
+
+def test_evidence_attribution_and_ranking_explanation():
+    edges_a = [
+        {"id": "E1", "subject": "TNF", "object": "IL6", "sign": "+", "conflict": False, "evidence_score": 0.8, "context": {"tissue": "Blood"}}
+    ]
+    edges_b = [
+        {"id": "E2", "subject": "TNF", "object": "IL6", "sign": "+", "conflict": False, "context": {"tissue": "Liver"}}
+    ]
+    attr = attribute_path_evidence_v02(edges_a, target_context={"tissue": "Blood"})
+    assert attr["total_edges"] == 1
+    assert attr["supported_edges"] == 1
+    assert attr["context_matched_edges"] == 1
+    assert attr["sign_counts"]["positive"] == 1
+
+    ranked = rank_paths_with_context_v02(
+        candidates=[{"path_id": "P_B", "edges": edges_b}, {"path_id": "P_A", "edges": edges_a}],
+        target_context={"tissue": "Blood"},
+    )
+    exp = explain_path_ranking_v02(
+        ranked,
+        index=0,
+        edges_by_path_id={"P_A": edges_a, "P_B": edges_b},
+        target_context={"tissue": "Blood"},
+    )
+    assert exp is not None
+    assert exp["path_id"] == "P_A"
+    assert exp["evidence_attribution"]["supported_edges"] == 1
+    assert exp["comparison_to_next"]["next_path_id"] == "P_B"
+    assert exp["comparison_to_next"]["score_lead_over_next"] > 0.0
 
 
 def test_top_k_selection_and_summary():

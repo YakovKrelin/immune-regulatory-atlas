@@ -249,6 +249,122 @@ def score_candidate_path_v02(
     }
 
 
+def attribute_path_evidence_v02(
+    edges: list[dict[str, Any]],
+    target_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ctx = target_context or {}
+    context_fields = ("organism", "tissue", "cell_type", "stimulus", "timepoint", "eco")
+    requested_ctx = {
+        field: _norm_str(ctx.get(field))
+        for field in context_fields
+        if _norm_str(ctx.get(field))
+    }
+
+    total_edges = len(edges)
+    conflict_free_edges = 0
+    supported_edges = 0
+    context_matched_edges = 0
+    pos_signs = 0
+    neg_signs = 0
+    neutral_signs = 0
+
+    for edge in edges:
+        is_conflict = bool(edge.get("conflict"))
+        if not is_conflict:
+            conflict_free_edges += 1
+
+        sign_val = _norm_sign(edge.get("sign") or edge.get("direction") or edge.get("polarity"))
+        if sign_val > 0:
+            pos_signs += 1
+        elif sign_val < 0:
+            neg_signs += 1
+        else:
+            neutral_signs += 1
+
+        edge_ctx = edge.get("context") if isinstance(edge.get("context"), dict) else edge
+        eco_val = _norm_str(edge_ctx.get("eco") or edge.get("eco"))
+        ev_score = edge.get("evidence_score")
+        has_strong_eco = eco_val in {"a", "b", "eco:0000314", "eco:0000353"}
+        has_positive_ev = isinstance(ev_score, (int, float)) and float(ev_score) > 0.0
+        if (has_strong_eco or has_positive_ev) and not is_conflict:
+            supported_edges += 1
+
+        if requested_ctx and any(
+            _norm_str(edge_ctx.get(field)) == expected
+            for field, expected in requested_ctx.items()
+        ):
+            context_matched_edges += 1
+
+    return {
+        "total_edges": total_edges,
+        "conflict_free_edges": conflict_free_edges,
+        "supported_edges": supported_edges,
+        "context_matched_edges": context_matched_edges,
+        "sign_counts": {
+            "positive": pos_signs,
+            "negative": neg_signs,
+            "neutral": neutral_signs,
+        },
+    }
+
+
+def explain_path_ranking_v02(
+    ranked_paths: list[dict[str, Any]],
+    index: int = 0,
+    edges_by_path_id: dict[str, list[dict[str, Any]]] | None = None,
+    target_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if not ranked_paths or index < 0 or index >= len(ranked_paths):
+        return None
+
+    current = ranked_paths[index]
+    pid = str(current.get("path_id", ""))
+    cur_score = float(current.get("net_score", 0.0))
+
+    explanation: dict[str, Any] = {
+        "path_id": pid,
+        "rank": current.get("rank", index + 1),
+        "net_score": round(cur_score, 4),
+        "normalized_confidence": round(float(current.get("normalized_confidence", 0.0)), 4),
+        "conflict_count": int(current.get("conflict_count", 0)),
+        "counter_marker_hits": len(current.get("matched_counter_markers") or []),
+        "context_coverage": round(float(current.get("context_coverage", 0.0)), 4),
+        "score_breakdown": current.get("score_breakdown", {}),
+    }
+
+    if edges_by_path_id and pid in edges_by_path_id:
+        explanation["evidence_attribution"] = attribute_path_evidence_v02(
+            edges=edges_by_path_id[pid],
+            target_context=target_context,
+        )
+
+    if index + 1 < len(ranked_paths):
+        nxt = ranked_paths[index + 1]
+        nxt_score = float(nxt.get("net_score", 0.0))
+        lead = round(cur_score - nxt_score, 4)
+        factors: list[str] = []
+        if lead == 0.0:
+            if int(current.get("conflict_count", 0)) < int(nxt.get("conflict_count", 0)):
+                factors.append("fewer_conflicts")
+            if len(current.get("matched_counter_markers") or []) < len(nxt.get("matched_counter_markers") or []):
+                factors.append("fewer_counter_markers")
+            if pid < str(nxt.get("path_id", "")):
+                factors.append("path_id_lexicographic")
+        else:
+            factors.append("higher_net_score")
+
+        explanation["comparison_to_next"] = {
+            "next_path_id": nxt.get("path_id"),
+            "score_lead_over_next": lead,
+            "tie_breaker_factors": factors,
+        }
+    else:
+        explanation["comparison_to_next"] = None
+
+    return explanation
+
+
 def compare_path_scores_v02(
     primary_score: dict[str, Any],
     baseline_score: dict[str, Any],
