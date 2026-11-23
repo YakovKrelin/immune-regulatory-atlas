@@ -33,6 +33,7 @@ from bioos.engine.path_ranking import (
     evaluate_weight_sensitivity_v02,
     explain_path_ranking_v02,
     filter_and_rank_paths_v02,
+    filter_consensus_by_retention_v02,
     filter_consensus_by_stability_confidence_v02,
     filter_consensus_by_stability_v02,
     filter_consensus_by_thresholds_v02,
@@ -61,6 +62,7 @@ from bioos.engine.path_ranking import (
     select_top_paths_v02,
     serialize_ranked_paths_v02,
     summarize_consensus_rank_shifts_v02,
+    summarize_consensus_retention_dispersion_v02,
     summarize_consensus_stability_v02,
     summarize_context_breadth_v02,
     summarize_ranked_paths_v02,
@@ -143,6 +145,44 @@ def test_context_coverage_and_evidence_boost_preferred_path():
     margins = classify_rank_margins_v02(ranked, narrow_threshold=0.15)
     assert margins[0]["margin_class"] == "decisive"
     assert margins[1]["margin_class"] == "tail"
+
+
+def test_retention_filtering_and_retention_dispersion_summary():
+    consensus_rows = [
+        {"path_id": "P_PARTIAL", "mean_net_score": 2.0, "mean_normalized_confidence": 0.9},
+        {"path_id": "P_FULL", "mean_net_score": 1.5, "mean_normalized_confidence": 0.8},
+        {"path_id": "P_ZERO", "mean_net_score": 1.2, "mean_normalized_confidence": 0.5},
+    ]
+    stability_rows = [
+        {"path_id": "P_PARTIAL", "consensus_retention_rate": 0.5, "max_rank_shift": 2},
+        {"path_id": "P_FULL", "consensus_retention_rate": 1.0, "max_rank_shift": 0},
+        {"path_id": "P_ZERO", "consensus_retention_rate": 0.0, "max_rank_shift": 3},
+    ]
+
+    filtered = filter_consensus_by_retention_v02(
+        consensus_rows=consensus_rows,
+        stability_rows=stability_rows,
+        min_retention_rate=0.5,
+        max_rank_shift=2,
+        include_rejected=True,
+    )
+    accepted = [r for r in filtered if r.get("accepted")]
+    rejected = [r for r in filtered if not r.get("accepted")]
+    assert [r["path_id"] for r in accepted] == ["P_FULL", "P_PARTIAL"]
+    assert [r["rank"] for r in accepted] == [1, 2]
+    assert [r["path_id"] for r in rejected] == ["P_ZERO"]
+    assert "below_min_retention_rate" in rejected[0]["rejection_reasons"]
+    assert "above_max_rank_shift" in rejected[0]["rejection_reasons"]
+
+    disp = summarize_consensus_retention_dispersion_v02(stability_rows)
+    assert disp["candidate_count"] == 3
+    assert disp["full_retention_count"] == 1
+    assert disp["partial_retention_count"] == 1
+    assert disp["zero_retention_count"] == 1
+    assert disp["min_retention_rate"] == 0.0
+    assert disp["max_retention_rate"] == 1.0
+    assert disp["retention_spread"] == 1.0
+    assert disp["mean_retention_rate"] == 0.5
 
 
 def test_stability_filtered_confidence_and_shift_summary():
