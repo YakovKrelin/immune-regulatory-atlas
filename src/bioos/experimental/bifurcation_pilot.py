@@ -61,11 +61,10 @@ class ContextSpec:
     condition_or_stimulus: ContextField
     timepoint: ContextField = field(default_factory=lambda: ContextField(None, AbsenceStatus.MISSING))
     duration: ContextField = field(default_factory=lambda: ContextField(None, AbsenceStatus.MISSING))
-    # Опциональные поля расширения (без потери исходного значения)
     dose_raw: str | None = None
     dose_normalized: str | None = None
     assay: str | None = None
-    measurement_level: str | None = None  # rna | protein | phenotype | other
+    measurement_level: str | None = None # rna | protein | phenotype | other
     donor_or_batch: str | None = None
 
 
@@ -77,7 +76,7 @@ class EvidenceItem:
     relation_or_direction: Direction
     target: str
     status: EvidenceStatus = EvidenceStatus.EXTRACTED
-    # Опциональные поля расширения
+
     study_type: str | None = None
     measurement_level: str | None = None
     sample_size: int | None = None
@@ -128,8 +127,8 @@ def evaluate_pilot_scenario(
             mode=InferenceMode.HARD_ABSTENTION,
             hypotheses=[],
             conflicts=[],
-            missing_context_or_data=["observations (нет входных наблюдений или маркеров)"],
-            recommended_next_tests=["Укажите наблюдаемые маркеры/изменения и контекст эксперимента."],
+            missing_context_or_data=["observations (no input observations or markers provided)"],
+            recommended_next_tests=["Provide observed markers or changes along with the experimental context."],
             snapshot_ref=snapshot_ref,
         )
 
@@ -140,84 +139,85 @@ def evaluate_pilot_scenario(
     if context.condition_or_stimulus.status != AbsenceStatus.PRESENT:
         missing.append(f"context.condition_or_stimulus ({context.condition_or_stimulus.status.value})")
     if context.timepoint.status != AbsenceStatus.PRESENT and context.duration.status != AbsenceStatus.PRESENT:
-        missing.append("context.timepoint / context.duration (не заданы ни временная точка, ни длительность)")
+        missing.append("context.timepoint / context.duration (neither timepoint nor duration provided)")
     if context.measurement_level is None:
-        missing.append("measurement_level (не указан уровень измерения: РНК, белок или фенотип)")
+        missing.append("measurement_level (measurement level not specified: RNA, protein, or phenotype)")
 
     obs_map = {obs.marker_or_entity.upper(): obs.direction for obs in observations}
     up_markers = {k for k, v in obs_map.items() if v == Direction.UP}
 
-    # Фиксируем конфликты из базы доказательств и между наблюдениями
     for ev in evidence_items:
         if ev.status == EvidenceStatus.CONFLICTED:
-            conflicts.append(f"Конфликт в источнике {ev.source_ref} ({ev.evidence_id}): {ev.subject} -> {ev.target}")
+            conflicts.append(f"Conflict in {ev.source_ref} ({ev.evidence_id}): {ev.subject} -> {ev.target}")
         marker_key = ev.target.upper()
-        if marker_key in obs_map and obs_map[marker_key] != Direction.UNKNOWN and ev.relation_or_direction != obs_map[marker_key]:
+        if (
+            marker_key in obs_map
+            and obs_map[marker_key] != Direction.UNKNOWN
+            and ev.relation_or_direction != obs_map[marker_key]
+        ):
             if ev.relation_or_direction not in (Direction.MIXED, Direction.CONFLICTED):
                 conflicts.append(
-                    f"Расхождение с наблюдением по {marker_key}: вход={obs_map[marker_key].value}, "
-                    f"доказательство {ev.evidence_id}={ev.relation_or_direction.value}"
+                    f"Conflict on {marker_key}: observed={obs_map[marker_key].value}, "
+                    f"evidence {ev.evidence_id}={ev.relation_or_direction.value}"
                 )
 
-    # Пример формирования конкурирующих ветвей для воспалительно-интерферонового / стрессового профиля
     has_tnf_il6 = "TNF" in up_markers and "IL6" in up_markers
     has_ifng_cxcl10 = "IFNG" in up_markers and "CXCL10" in up_markers
 
     h1 = HypothesisBranch(
         hypothesis_id="H1",
-        title="Смешанный воспалительно-интерфероновый ответ",
-        summary="Одновременная активация провоспалительного контура (TNF/IL6) и интерферонового ответа (IFNG/CXCL10) в условиях гипоксии/стресса.",
+        title="Mixed inflammatory and interferon response",
+        summary="Concurrent inflammatory (TNF/IL6) and interferon (IFNG/CXCL10) activation under hypoxia or stress.",
         supporting_evidence_ids=[e.evidence_id for e in evidence_items if e.relation_or_direction == Direction.UP],
         contradicting_evidence_ids=[e.evidence_id for e in evidence_items if e.status == EvidenceStatus.CONFLICTED],
         related_path_refs=["path:TNF->NFKB->IL6", "path:IFNG->STAT1->CXCL10"],
         compatibility_level="high" if (has_tnf_il6 and has_ifng_cxcl10) else "moderate",
         uncertainty_notes=[
-            "Не разведены прямая ко-активация и вклад гипоксии/метаболического стресса.",
-            "Временная точка и длительность экспозиции требуют раздельной проверки.",
+            "Bulk measurements do not separate intracellular signaling from shifts in population composition.",
+            "Baseline or prior activation state may confound stimulus attribution.",
         ],
         distinguishing_measurements=[
-            "Профиль ISG15, MX1, OAS1 (уточнение силы интерфероновой ветви)",
-            "Повторный замер по временным точкам (динамика индукции)",
+            "Measure ISG15, MX1, and OAS1 expression",
+            "Assess cellular composition and protein abundance (not RNA alone)",
         ],
     )
 
     h2 = HypothesisBranch(
         hypothesis_id="H2",
-        title="Инфекционный (в т.ч. вирусный) стимул",
-        summary="Профиль согласуется с распознаванием патогена / нуклеиновых кислот и запуском интерферонового + цитокинового ответа.",
+        title="Infectious or pathogen-driven stimulus",
+        summary="Profile aligns with pathogen or nucleic acid sensing driving an interferon and cytokine response.",
         supporting_evidence_ids=[e.evidence_id for e in evidence_items if e.target.upper() in {"IFNG", "CXCL10", "IL6"}],
         contradicting_evidence_ids=[],
         related_path_refs=["path:PRR/IFN->CXCL10", "path:inflammatory->IL6"],
         compatibility_level="moderate" if has_ifng_cxcl10 else "low",
         uncertainty_notes=[
-            "По текущим маркерам нельзя отличить инфекционный стимул от стерильного воспаления/гипоксии.",
+            "Pathogen nucleic acid or viral stimulus has not been directly assayed.",
         ],
         distinguishing_measurements=[
-            "Вирусная ПЦР / тесты на патоген-ассоциированные маркеры",
-            "Панель ISG15, MX1, OAS1 и измерение на уровне белка/секреции",
+            "Viral PCR or check for infectious stimulus",
+            "Measure ISG15, MX1, and OAS1 expression",
         ],
     )
 
     h3 = HypothesisBranch(
         hypothesis_id="H3",
-        title="Сдвиг клеточного состава / активационного состояния популяции",
-        summary="Наблюдаемый сигнал может отражать изменение доли активированных субпопуляций (например, в PBMC) или предшествующую активацию.",
+        title="Cellular composition or activation-state shift",
+        summary="Observed signal may reflect shifts in activated subpopulation fractions or prior activation state.",
         supporting_evidence_ids=[e.evidence_id for e in evidence_items if e.target.upper() in {"TNF", "IL6", "CXCL10"}],
         contradicting_evidence_ids=[],
         related_path_refs=["path:population_shift->bulk_signal"],
-        compatibility_level="moderate" if context.tissue_or_cell.value in {"PBMC", "macrophage", "макрофаг"} else "low",
+        compatibility_level="moderate" if context.tissue_or_cell.value in {"PBMC", "macrophage", "PBMC / macrophage"} else "low",
         uncertainty_notes=[
-            "Объёмные (bulk) измерения не разделяют внутриклеточный сигнал и сдвиг состава популяции.",
+            "Bulk measurements do not separate intracellular signaling from shifts in population composition.",
         ],
         distinguishing_measurements=[
-            "Оценка клеточного состава / фенотипа субпопуляций",
-            "Контроль baseline/предшествующей активации и уровня белка",
+            "Assess cellular composition and subpopulation phenotype",
+            "Control for baseline or prior activation state and protein level",
         ],
     )
 
     hypotheses = [h1, h2, h3]
 
-    # Определяем режим неопределённости: бифуркация при нескольких совместимых ветвях
     compatible_count = sum(1 for h in hypotheses if h.compatibility_level in {"high", "moderate"})
     if compatible_count >= 2 or conflicts:
         mode = InferenceMode.WEAK_INFERENCE
@@ -225,10 +225,10 @@ def evaluate_pilot_scenario(
         mode = InferenceMode.CONDITIONAL_INFERENCE
 
     recommended_tests = [
-        "Вирусная ПЦР / проверка инфекционного стимула",
-        "Измерение ISG15, MX1, OAS1",
-        "Оценка клеточного состава и уровня белка (не только РНК)",
-        "Повторное измерение во времени (разделение timepoint и duration)",
+        "Viral PCR or check for infectious stimulus",
+        "Measure ISG15, MX1, and OAS1 expression",
+        "Assess cellular composition and protein abundance (not RNA alone)",
+        "Repeat time-course measurements (separating timepoint and duration)",
     ]
 
     return ReasoningReport(

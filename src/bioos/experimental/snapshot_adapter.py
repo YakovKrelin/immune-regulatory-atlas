@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
 from bioos.engine.graph_snapshot import RegulatoryGraphSnapshot, rank_snapshot_paths_v02
-from bioos.engine.path_ranking import _norm_sign
 from bioos.experimental.bifurcation_pilot import (
+    AbsenceStatus,
     ContextField,
     ContextSpec,
     Direction,
@@ -16,146 +16,181 @@ from bioos.experimental.bifurcation_pilot import (
     evaluate_pilot_scenario,
 )
 
+H1_MARKERS = {"TNF", "IL6", "IL1B", "NFKB1", "IFNG", "STAT1", "CXCL10", "ISG15", "MX1", "OAS1"}
+H2_MARKERS = {"TLR3", "TLR4", "TLR7", "TLR9", "DDX58", "RIGI", "IFIH1", "CGAS", "STING1", "IFNB1", "IFNG", "CXCL10", "IL6"}
+H3_MARKERS = {"CD14", "CD16", "FCGR3A", "CD4", "CD8A", "HLA-DRA", "CCR7", "CD68", "MKI67"}
 
-def context_spec_from_dict(ctx: dict[str, Any] | None) -> ContextSpec:
-    data = ctx or {}
-    species = data.get("organism") or data.get("species")
-    tissue_cell = data.get("cell_type") or data.get("tissue") or data.get("tissue_or_cell")
-    stimulus = data.get("stimulus") or data.get("condition") or data.get("condition_or_stimulus")
-    timepoint = data.get("timepoint")
-    duration = data.get("duration")
+
+def _norm_sign(value: Any) -> int:
+    if isinstance(value, (int, float)):
+        if value > 0:
+            return 1
+        if value < 0:
+            return -1
+        return 0
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in {"+", "1", "up", "activate", "activating", "positive", "pos"}:
+            return 1
+        if s in {"-", "-1", "down", "inhibit", "inhibiting", "negative", "neg"}:
+            return -1
+    return 0
+
+
+def _extract_path_tokens(row: dict[str, Any]) -> set[str]:
+    tokens: set[str] = set()
+    for key in ("nodes", "path", "genes", "markers"):
+        val = row.get(key)
+        if isinstance(val, (list, tuple, set)):
+            for item in val:
+                if isinstance(item, str) and item.strip():
+                    tokens.add(item.strip().upper())
+    edges = row.get("edges")
+    if isinstance(edges, (list, tuple)):
+        for edge in edges:
+            if isinstance(edge, dict):
+                for ek in ("subject", "source", "object", "target"):
+                    ev = edge.get(ek)
+                    if isinstance(ev, str) and ev.strip():
+                        tokens.add(ev.strip().upper())
+    pid = str(row.get("path_id") or row.get("id") or "")
+    for part in pid.replace("->", "_").replace("-", "_").split("_"):
+        if part.strip():
+            tokens.add(part.strip().upper())
+    return tokens
+
+
+def _classify_path_for_branches(row: dict[str, Any], index: int) -> list[str]:
+    tokens = _extract_path_tokens(row)
+    assigned: list[str] = []
+    if tokens & H1_MARKERS:
+        assigned.append("H1")
+    if tokens & H2_MARKERS:
+        assigned.append("H2")
+    if tokens & H3_MARKERS:
+        assigned.append("H3")
+    if not assigned:
+        fallback_order = ["H1", "H2", "H3"]
+        assigned.append(fallback_order[index % len(fallback_order)])
+    return assigned
+
+
+def _build_context_from_snapshot(snapshot: RegulatoryGraphSnapshot) -> ContextSpec:
+    target = snapshot.target_context or {}
+    species_val = target.get("organism") or target.get("species")
+    tissue_val = target.get("cell_type") or target.get("tissue") or target.get("tissue_or_cell")
+    cond_val = target.get("stimulus") or target.get("condition") or target.get("condition_or_stimulus")
+    time_val = target.get("timepoint")
+    dur_val = target.get("duration")
+    meas_val = target.get("measurement_level") or target.get("assay")
 
     return ContextSpec(
-        species=ContextField.from_value(species),
-        tissue_or_cell=ContextField.from_value(tissue_cell),
-        condition_or_stimulus=ContextField.from_value(stimulus),
-        timepoint=ContextField.from_value(timepoint),
-        duration=ContextField.from_value(duration),
-        dose_raw=str(data["dose"]) if data.get("dose") is not None else None,
-        assay=str(data["assay"]) if data.get("assay") is not None else None,
-        measurement_level=str(data["measurement_level"]) if data.get("measurement_level") is not None else None,
-        donor_or_batch=str(data["donor_or_batch"]) if data.get("donor_or_batch") is not None else None,
+        species=ContextField.from_value(species_val) if species_val else ContextField(None, AbsenceStatus.UNKNOWN),
+        tissue_or_cell=ContextField.from_value(tissue_val) if tissue_val else ContextField(None, AbsenceStatus.UNKNOWN),
+        condition_or_stimulus=ContextField.from_value(cond_val) if cond_val else ContextField(None, AbsenceStatus.UNKNOWN),
+        timepoint=ContextField.from_value(time_val) if time_val else ContextField(None, AbsenceStatus.UNKNOWN),
+        duration=ContextField.from_value(dur_val) if dur_val else ContextField(None, AbsenceStatus.UNKNOWN),
+        measurement_level=str(meas_val) if meas_val else None,
     )
 
 
-def candidates_to_evidence(candidates: list[dict[str, Any]], snapshot_id: str | None) -> list[EvidenceItem]:
+def _candidates_to_evidence(snapshot: RegulatoryGraphSnapshot) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
-    prefix = snapshot_id or "snapshot"
-    for idx, cand in enumerate(candidates):
-        path_id = str(cand.get("path_id") or cand.get("id") or f"path_{idx}")
-        nodes = cand.get("nodes") or cand.get("path") or []
+    candidates = getattr(snapshot, "candidates", None) or []
+    for c_idx, cand in enumerate(candidates):
+        if not isinstance(cand, dict):
+            continue
+        pid = str(cand.get("path_id") or cand.get("id") or f"cand_{c_idx}")
         edges = cand.get("edges") or []
-
-        if edges and isinstance(edges, list):
+        if isinstance(edges, list) and edges:
             for e_idx, edge in enumerate(edges):
-                subj = str(edge.get("subject", "")).strip()
-                obj = str(edge.get("object", "")).strip()
-                if not subj or not obj:
+                if not isinstance(edge, dict):
                     continue
-                is_conflict = bool(edge.get("conflict")) or bool(cand.get("counter_sign_conflict"))
-                sign = _norm_sign(edge.get("sign") or edge.get("direction") or edge.get("polarity"))
-                direction = (
-                    Direction.CONFLICTED
-                    if is_conflict
-                    else (Direction.UP if sign > 0 else Direction.DOWN if sign < 0 else Direction.UNKNOWN)
-                )
-                status = EvidenceStatus.CONFLICTED if is_conflict else EvidenceStatus.EXTRACTED
+                subj = str(edge.get("subject") or edge.get("source") or "UNKNOWN_SRC")
+                obj = str(edge.get("object") or edge.get("target") or "UNKNOWN_TGT")
+                sign = _norm_sign(edge.get("sign") or edge.get("polarity"))
+                direction = Direction.DOWN if sign < 0 else Direction.UP
+                status = EvidenceStatus.CONFLICTED if sign < 0 else EvidenceStatus.REVIEWED
                 items.append(
                     EvidenceItem(
-                        evidence_id=f"{prefix}:{path_id}:e{e_idx}",
-                        source_ref=str(edge.get("source_ref") or f"{prefix}:{path_id}"),
+                        evidence_id=f"{pid}:e{e_idx}",
+                        source_ref=f"snapshot:{snapshot.snapshot_id}",
                         subject=subj,
                         relation_or_direction=direction,
                         target=obj,
                         status=status,
                     )
                 )
-        elif isinstance(nodes, (list, tuple)) and len(nodes) >= 2:
-            subj = str(nodes[0]).strip()
-            obj = str(nodes[-1]).strip()
-            sign = _norm_sign(cand.get("sign") or cand.get("expected_sign") or cand.get("polarity"))
-            is_conflict = bool(cand.get("counter_sign_conflict")) or bool(cand.get("conflict"))
-            direction = (
-                Direction.CONFLICTED
-                if is_conflict
-                else (Direction.UP if sign > 0 else Direction.DOWN if sign < 0 else Direction.UNKNOWN)
-            )
-            status = EvidenceStatus.CONFLICTED if is_conflict else EvidenceStatus.EXTRACTED
-            items.append(
-                EvidenceItem(
-                    evidence_id=f"{prefix}:{path_id}",
-                    source_ref=f"{prefix}:{path_id}",
-                    subject=subj,
-                    relation_or_direction=direction,
-                    target=obj,
-                    status=status,
+        else:
+            nodes = cand.get("nodes") or []
+            if isinstance(nodes, (list, tuple)) and len(nodes) >= 2:
+                subj = str(nodes[0])
+                obj = str(nodes[-1])
+                sign = _norm_sign(cand.get("sign") or cand.get("polarity"))
+                direction = Direction.DOWN if sign < 0 else Direction.UP
+                status = EvidenceStatus.CONFLICTED if sign < 0 else EvidenceStatus.REVIEWED
+                items.append(
+                    EvidenceItem(
+                        evidence_id=pid,
+                        source_ref=f"snapshot:{snapshot.snapshot_id}",
+                        subject=subj,
+                        relation_or_direction=direction,
+                        target=obj,
+                        status=status,
+                    )
                 )
-            )
     return items
 
 
 def run_bifurcation_from_snapshot(
-    snapshot: RegulatoryGraphSnapshot | dict[str, Any],
+    snapshot: RegulatoryGraphSnapshot,
     observations: list[Observation],
-    context: ContextSpec | None = None,
-    *,
-    expected_sign: Any = None,
-    active_markers: list[str] | set[str] | None = None,
-    anchor_markers: list[str] | set[str] | None = None,
-    counter_markers: list[str] | set[str] | None = None,
+    expected_sign: str = "+",
 ) -> ReasoningReport:
-    obs_up = [o.marker_or_entity for o in observations if o.direction == Direction.UP]
-    effective_active = list(active_markers) if active_markers is not None else obs_up
+    ctx = _build_context_from_snapshot(snapshot)
+    ev_items = _candidates_to_evidence(snapshot)
+    snap_ref = f"{snapshot.snapshot_id}:sha256:{snapshot.sha256}"
 
-    snap_result = rank_snapshot_paths_v02(
-        snapshot,
-        expected_sign=expected_sign,
-        active_markers=effective_active,
-        anchor_markers=anchor_markers,
-        counter_markers=counter_markers,
-    )
-
-    ctx_spec = context if context is not None else context_spec_from_dict(snap_result.get("target_context"))
-    ranked_paths = snap_result.get("ranked_paths") or []
-    cohort_summary = snap_result.get("cohort_summary") or {}
-
-    snap_id = snap_result.get("snapshot_id") or "snapshot"
-    snap_sha = snap_result.get("sha256") or "missing_sha256"
-    snapshot_ref = f"{snap_id}:sha256:{snap_sha}"
-
-    evidence = candidates_to_evidence(ranked_paths, snap_id)
     report = evaluate_pilot_scenario(
         observations=observations,
-        context=ctx_spec,
-        evidence_items=evidence,
-        snapshot_ref=snapshot_ref,
+        context=ctx,
+        evidence_items=ev_items,
+        snapshot_ref=snap_ref,
     )
 
-    top_refs: list[str] = []
-    for item in ranked_paths[:5]:
-        pid = item.get("path_id") or item.get("id") or "path"
-        score_val = (
-            item.get("final_score")
-            or item.get("adjusted_score")
-            or item.get("net_score")
-            or item.get("score")
-        )
-        top_refs.append(f"{pid}:{score_val}" if score_val is not None else str(pid))
+    ranking_out = rank_snapshot_paths_v02(snapshot, expected_sign=expected_sign)
+    ranked_paths = ranking_out.get("ranked_paths") or []
 
-    if top_refs or cohort_summary:
-        cohort_note = f"cohort_summary={cohort_summary}" if cohort_summary else ""
-        for branch in report.hypotheses:
-            for ref in top_refs:
-                if ref not in branch.related_path_refs:
-                    branch.related_path_refs.append(ref)
-            if cohort_note:
-                branch.uncertainty_notes.append(cohort_note)
+    branch_path_refs: dict[str, list[str]] = {"H1": [], "H2": [], "H3": []}
+    for idx, row in enumerate(ranked_paths):
+        if not isinstance(row, dict):
+            continue
+        pid = str(row.get("path_id") or row.get("id") or f"path_{idx}")
+        score = row.get("adjusted_net_score", row.get("net_score", row.get("raw_score", 0.0)))
+        ref_label = f"{pid}:{score}"
+        target_branches = _classify_path_for_branches(row, idx)
+        for b_id in target_branches:
+            if b_id in branch_path_refs and ref_label not in branch_path_refs[b_id]:
+                branch_path_refs[b_id].append(ref_label)
 
-    has_snap_conflict = any(
-        bool(row.get("counter_sign_conflict")) or bool(row.get("conflict"))
-        for row in ranked_paths
-    )
-    if has_snap_conflict and report.mode == InferenceMode.CONDITIONAL_INFERENCE:
+        cs_count = int(row.get("counter_sign_count") or 0)
+        cs_ratio = float(row.get("counter_sign_ratio") or 0.0)
+        conf_count = int(row.get("conflict_count") or 0)
+        has_flag = bool(row.get("counter_sign_conflict")) or bool(row.get("conflict"))
+        row_sign = _norm_sign(row.get("sign") or row.get("expected_sign") or row.get("polarity"))
+        exp_sign = _norm_sign(expected_sign)
+        sign_mismatch = exp_sign != 0 and row_sign != 0 and row_sign != exp_sign
+
+        if cs_count > 0 or cs_ratio > 0.0 or conf_count > 0 or has_flag or sign_mismatch:
+            msg = f"counter-sign conflict in {pid} (count={cs_count}, ratio={cs_ratio})"
+            if msg not in report.conflicts:
+                report.conflicts.append(msg)
+
+    for hyp in report.hypotheses:
+        if hyp.hypothesis_id in branch_path_refs and branch_path_refs[hyp.hypothesis_id]:
+            hyp.related_path_refs = branch_path_refs[hyp.hypothesis_id]
+
+    if report.conflicts and report.mode == InferenceMode.CONDITIONAL_INFERENCE:
         report.mode = InferenceMode.WEAK_INFERENCE
 
     return report
