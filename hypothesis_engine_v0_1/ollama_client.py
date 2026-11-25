@@ -18,6 +18,27 @@ class OllamaClientConfig(BaseModel):
     seed: int | None = Field(default=None)
     keep_alive: str | int | None = Field(default=None)
 
+    @classmethod
+    def for_qwen25_14b(
+        cls,
+        *,
+        base_url: str = "http://127.0.0.1:11434",
+        timeout_seconds: float = 60.0,
+        temperature: float = 0.1,
+        num_predict: int | None = 1024,
+        seed: int | None = 42,
+        keep_alive: str | int | None = "10m",
+    ) -> "OllamaClientConfig":
+        return cls(
+            base_url=base_url,
+            model="qwen2.5:14b",
+            timeout_seconds=timeout_seconds,
+            temperature=temperature,
+            num_predict=num_predict,
+            seed=seed,
+            keep_alive=keep_alive,
+        )
+
 
 class OllamaExplanationClient:
     """Adapter implementing ExplanationLLMClient against a local Ollama server."""

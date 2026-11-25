@@ -276,3 +276,20 @@ def test_render_markdown_includes_num_predict_and_seed(monkeypatch: pytest.Monke
     assert isinstance(options, dict)
     assert options["num_predict"] == 256
     assert options["seed"] == 42
+
+
+def test_config_for_qwen25_14b_defaults_and_overrides() -> None:
+    from hypothesis_engine_v0_1.ollama_client import OllamaClientConfig
+
+    default_cfg = OllamaClientConfig.for_qwen25_14b()
+    assert default_cfg.model == "qwen2.5:14b"
+    assert default_cfg.temperature == 0.1
+    assert default_cfg.num_predict == 1024
+    assert default_cfg.seed == 42
+    assert default_cfg.keep_alive == "10m"
+
+    custom_cfg = OllamaClientConfig.for_qwen25_14b(num_predict=512, seed=7, keep_alive=0)
+    assert custom_cfg.model == "qwen2.5:14b"
+    assert custom_cfg.num_predict == 512
+    assert custom_cfg.seed == 7
+    assert custom_cfg.keep_alive == 0

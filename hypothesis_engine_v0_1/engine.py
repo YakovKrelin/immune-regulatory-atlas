@@ -661,6 +661,10 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
             limitations.append(
                 f"Extra panel '{extra_panel.program_id}' has indeterminate marker signals in current observations."
             )
+        elif extra_status == ProgramStatus.UP:
+            limitations.append(
+                f"Extra panel '{extra_panel.program_id}' is active (UP); evaluate its contribution separately from core hypotheses."
+            )
 
     if not timepoint_known:
         limitations.append(
