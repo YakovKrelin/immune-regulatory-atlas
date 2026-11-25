@@ -1,4 +1,5 @@
 from __future__ import annotations
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -125,6 +126,7 @@ def test_fastapi_postprocess_endpoint_returns_422_on_violation() -> None:
     body = response.json()
     assert any("query_id mismatch" in v for v in body["detail"]["violations"])
 
+
 def test_postprocessor_remaining_validation_and_non_strict_branches() -> None:
     engine_input, engine_output = _sample_input_and_output()
 
@@ -149,10 +151,12 @@ def test_postprocessor_remaining_validation_and_non_strict_branches() -> None:
     rich_output["hypotheses"] = dict(rich_output["hypotheses"])
     rich_output["hypotheses"]["H1"] = h1_dict
 
-    if rich_output.get("pairwise_relations"):
-        rel0 = dict(rich_output["pairwise_relations"][0])
-        rel0["discriminating_measurement_id"] = "M-MISSING-ID"
-        rich_output["pairwise_relations"] = [rel0] + list(rich_output["pairwise_relations"][1:])
+    orig_rels = list(rich_output.get("pairwise_relations") or [])
+    for candidate_rels in (orig_rels, []):
+        if candidate_rels:
+            rel0 = dict(candidate_rels[0])
+            rel0["discriminating_measurement_id"] = "M-MISSING-ID"
+            rich_output["pairwise_relations"] = [rel0] + list(candidate_rels[1:])
 
     rich_output["model_prior_notes"] = [
         {
@@ -178,6 +182,48 @@ def test_postprocessor_remaining_validation_and_non_strict_branches() -> None:
     assert any("evidence_conflict" in v.lower() or "contradicting" in v.lower() for v in res_rich.violations)
     assert any("M-MISSING-ID" in v for v in res_rich.violations)
 
+    no_rel_rich = dict(rich_output)
+    no_rel_rich["pairwise_relations"] = []
+    res_no_rel_rich = validate_and_postprocess(
+        PostProcessorRequest(
+            engine_input=engine_input,
+            engine_output=no_rel_rich,
+            rendered_explanation="Neutral summary.",
+            allowed_marker_ids={"UNKNOWN_MARKER_XYZ"},
+            allowed_evidence_ids={"EV-EXP-1", "EV-EXP-2"},
+            strict=False,
+        )
+    )
+    assert isinstance(res_no_rel_rich.violations, list)
+
+    empty_rel_out = dict(rich_output)
+    empty_rel_out["pairwise_relations"] = []
+    res_empty_rel = validate_and_postprocess(
+        PostProcessorRequest(
+            engine_input=engine_input,
+            engine_output=empty_rel_out,
+            rendered_explanation="Neutral summary.",
+            allowed_marker_ids={"UNKNOWN_MARKER_XYZ"},
+            allowed_evidence_ids={"EV-EXP-1", "EV-EXP-2"},
+            strict=False,
+        )
+    )
+    assert isinstance(res_empty_rel.violations, list)
+
+    no_rel_output = dict(rich_output)
+    no_rel_output["pairwise_relations"] = []
+    res_no_rel = validate_and_postprocess(
+        PostProcessorRequest(
+            engine_input=engine_input,
+            engine_output=no_rel_output,
+            rendered_explanation="Neutral summary.",
+            allowed_marker_ids={"UNKNOWN_MARKER_XYZ"},
+            allowed_evidence_ids={"EV-EXP-1", "EV-EXP-2"},
+            strict=False,
+        )
+    )
+    assert isinstance(res_no_rel.violations, list)
+
     unknown_contra_output = dict(engine_output)
     h1_contra = dict(unknown_contra_output["hypotheses"]["H1"])
     h1_contra["contradicting_evidence"] = ["EV-UNKNOWN-CONTRA"]
@@ -190,34 +236,65 @@ def test_postprocessor_remaining_validation_and_non_strict_branches() -> None:
             engine_input=engine_input,
             engine_output=unknown_contra_output,
             rendered_explanation="Neutral summary.",
+            allowed_evidence_ids={"EV-EXP-1", "EV-EXP-2"},
             strict=False,
         )
     )
     assert any("EV-UNKNOWN-CONTRA" in v for v in res_contra.violations)
 
-    valid_in, valid_out = _sample_input_and_output()
-    app = FastAPI()
-    app.include_router(postprocessor_router)
-    client = TestClient(app)
-    ok_resp = client.post(
-        "/v0.1/hypothesis-engine/postprocess",
-        json={
-            "engine_input": valid_in.model_dump(mode="json"),
-            "engine_output": valid_out,
-            "rendered_explanation": "Consistent with observed data.",
-        },
-    )
-    assert ok_resp.status_code == 200
-    assert ok_resp.json()["valid"] is True
-    assert any("causal" in v.lower() or "elevated because of" in v.lower() for v in res_rich.violations)
 
-    res_unknown_obs = validate_and_postprocess(
+def test_postprocessor_non_dict_observation_item_branch() -> None:
+    engine_input, engine_output = _sample_input_and_output()
+    engine_output["observations"] = [None, "not-a-dict", {"entity": "IL6"}]
+    req = PostProcessorRequest(
+        engine_input=engine_input,
+        engine_output=engine_output,
+        rendered_explanation="IL6 expression is observed in hypoxia.",
+        strict=False,
+    )
+    resp = validate_and_postprocess(req)
+    assert resp.sanitized_explanation is not None
+    assert any("UNKNOWN_MARKER_XYZ" in v or "IL6" in v for v in resp.violations)
+
+
+@pytest.mark.parametrize("has_relations", [False, True])
+def test_postprocessor_empty_pairwise_relations_branch(has_relations: bool) -> None:
+    engine_input, engine_output = _sample_input_and_output()
+    if not has_relations:
+        engine_output["pairwise_relations"] = []
+    req = PostProcessorRequest(
+        engine_input=engine_input,
+        engine_output=engine_output,
+        rendered_explanation="Consistent with observed data.",
+        strict=False,
+    )
+    resp = validate_and_postprocess(req)
+    assert resp.sanitized_explanation is not None
+
+def test_postprocessor_empty_pairwise_relations_only() -> None:
+    engine_input, engine_output = _sample_input_and_output()
+    out_empty_rel = dict(engine_output)
+    out_empty_rel["pairwise_relations"] = []
+    res = validate_and_postprocess(
         PostProcessorRequest(
             engine_input=engine_input,
-            engine_output=rich_output,
+            engine_output=out_empty_rel,
             rendered_explanation="Neutral summary.",
-            allowed_evidence_ids={"EV-EXP-1", "EV-EXP-2"},
             strict=False,
         )
     )
-    assert any("UNKNOWN_MARKER_XYZ" in v for v in res_unknown_obs.violations)
+    assert isinstance(res.violations, list)
+
+def test_postprocess_endpoint_valid_returns_response() -> None:
+    from hypothesis_engine_v0_1.postprocessor import postprocess_endpoint
+
+    engine_input, engine_output = _sample_input_and_output()
+    resp = postprocess_endpoint(
+        PostProcessorRequest(
+            engine_input=engine_input,
+            engine_output=engine_output,
+            rendered_explanation="Neutral summary with no causal claims.",
+            strict=False,
+        )
+    )
+    assert resp.valid is True

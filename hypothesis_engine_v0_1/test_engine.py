@@ -408,3 +408,158 @@ def test_merge_hypothesis_proposals_rule_conflict_and_contradicted() -> None:
     assert ev.rule_conflict is True
     assert len(conflicts) == 1
     assert ev.data_status == schemas.DataStatus.NOT_SUPPORTED_BY_DATA
+
+def test_branch_coverage_full_context_and_edge_cases() -> None:
+    payload = _build_base_payload("Q-BR-001")
+    payload.context.tissue = "Lung"
+    payload.context.cell_subtype = "Alveolar"
+    payload.context.study_design.replicates = 3
+    payload.context.study_design.batch = "B1"
+    payload.observations = [
+        schemas.Observation(
+            observation_id="O1",
+            entity="IL6",
+            assay="RNA-seq",
+            level="mRNA",
+            direction=schemas.SignalDirection.UP,
+            value=1.5,
+            unit="log2FC",
+            fdr=0.01,
+        ),
+        _make_obs("O2", "HIF1A", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O3", "VEGFA", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O4", "RELA", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O5", "TNF", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O6", "CD163", schemas.SignalDirection.DOWN, "RNA-seq"),
+    ]
+    payload.evidence_records = [
+        schemas.EvidenceRecord(
+            evidence_id="EV-UNKNOWN-H",
+            source_id="SRC-01",
+            claim_summary="Test claim targeting unknown hypothesis ID.",
+            curated=True,
+            supports_hypothesis_ids=["H99"],
+            contradicts_hypothesis_ids=["H99"],
+        )
+    ]
+    out = run_hypothesis_engine(payload)
+    assert out.query_id == "Q-BR-001"
+    assert "H1" in out.hypotheses
+
+
+def test_engine_remaining_down_and_indeterminate_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hypothesis_engine_v0_1.engine as eng
+
+    payload = _build_base_payload("Q-BR-002")
+    payload.observations = [
+        _make_obs("O1", "IL6", schemas.SignalDirection.UP, "RNA-seq"),
+        _make_obs("O2", "HIF1A", schemas.SignalDirection.DOWN, "RNA-seq"),
+        _make_obs("O3", "VEGFA", schemas.SignalDirection.DOWN, "RNA-seq"),
+        _make_obs("O4", "RELA", schemas.SignalDirection.DOWN, "RNA-seq"),
+        _make_obs("O5", "TNF", schemas.SignalDirection.DOWN, "RNA-seq"),
+    ]
+
+    orig_merge = eng._merge_hypothesis_proposals
+
+    def _wrapped_merge(**kwargs):
+        ev, conflicts = orig_merge(**kwargs)
+        if kwargs.get("h_id") == "H3":
+            ev.data_status = "other_status"
+        return ev, conflicts
+
+    monkeypatch.setattr(eng, "_merge_hypothesis_proposals", _wrapped_merge)
+    out = run_hypothesis_engine(payload)
+    assert out.query_id == "Q-BR-002"
+    assert out.hypotheses["H3"].decision_status == schemas.DecisionStatus.NOT_ASSESSED
+
+
+
+def test_build_base_payload_existing_fields_branches() -> None:
+    payload = _build_base_payload("Q-BR-003")
+    assert payload.context.organism == "Homo sapiens"
+    assert payload.context.cell_type == "macrophage"
+    assert payload.context.study_design.control == "untreated"
+
+
+def test_build_base_payload_all_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    orig_validate = schemas.HypothesisEngineInput.model_validate
+
+    def _validate_filled(data):
+        obj = orig_validate(data)
+        obj.context.organism = "Homo sapiens"
+        obj.context.cell_type = "macrophage"
+        obj.context.study_design.control = "untreated"
+        return obj
+
+    monkeypatch.setattr(schemas.HypothesisEngineInput, "model_validate", staticmethod(_validate_filled))
+    p2 = _build_base_payload("Q-BBP-2")
+    assert p2.context.organism == "Homo sapiens"
+
+    def _validate_no_sd(data):
+        obj = orig_validate(data)
+        obj.context.study_design = None
+        return obj
+
+    monkeypatch.setattr(schemas.HypothesisEngineInput, "model_validate", staticmethod(_validate_no_sd))
+    p3 = _build_base_payload("Q-BBP-3")
+    assert p3.context.study_design is None
+
+    monkeypatch.setattr(
+        schemas.HypothesisEngineInput,
+        "model_validate",
+        staticmethod(lambda data: SimpleNamespace(query_id=data.get("query_id", "Q-NO-CTX"))),
+    )
+    p4 = _build_base_payload("Q-BBP-4")
+    assert p4.query_id == "Q-BBP-4"
+
+
+def test_engine_remaining_panel_and_r004_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    import hypothesis_engine_v0_1.engine as eng
+
+    panel = schemas.ProgramPanel(
+        program_id="P_AMB_BRANCH",
+        core_markers=["CORE_AMB"],
+        supporting_markers=["SUPP_AMB"],
+    )
+    obs = [
+        _make_obs("O1", "CORE_AMB", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O2", "CORE_AMB", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O3", "SUPP_AMB", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+        _make_obs("O4", "SUPP_AMB", schemas.SignalDirection.AMBIGUOUS, "RNA-seq"),
+    ]
+    status = eng._evaluate_program(panel, obs, None)
+    assert status in schemas.ProgramStatus
+
+    payload = _build_base_payload("Q-BR-004")
+    payload.observations = [
+        _make_obs("O1", "RELA", schemas.SignalDirection.UP, "RNA-seq"),
+        _make_obs("O2", "NFKB1", schemas.SignalDirection.UP, "RNA-seq"),
+        _make_obs("O3", "IL6", schemas.SignalDirection.UP, "RNA-seq"),
+        _make_obs("O4", "CXCL8", schemas.SignalDirection.UP, "RNA-seq"),
+        _make_obs("O5", "HIF1A", schemas.SignalDirection.DOWN, "RNA-seq"),
+        _make_obs("O6", "VEGFA", schemas.SignalDirection.DOWN, "RNA-seq"),
+        _make_obs("O7", "SLC2A1", schemas.SignalDirection.DOWN, "RNA-seq"),
+        _make_obs("O8", "LDHA", schemas.SignalDirection.DOWN, "RNA-seq"),
+    ]
+
+    orig_eval = eng._evaluate_program
+    seen_calls = {"n": 0}
+
+    def _eval_with_hif_down(p, obs_list, tp=None):
+        res = orig_eval(p, obs_list, tp)
+        seen_calls["n"] += 1
+        if seen_calls["n"] == 1:
+            return schemas.ProgramStatus.UP
+        if seen_calls["n"] == 2:
+            return schemas.ProgramStatus.UP
+        if seen_calls["n"] == 3:
+            return schemas.ProgramStatus.DOWN
+        return res
+
+    monkeypatch.setattr(eng, "_evaluate_program", _eval_with_hif_down)
+    out = run_hypothesis_engine(payload)
+    assert out.query_id == "Q-BR-004"
