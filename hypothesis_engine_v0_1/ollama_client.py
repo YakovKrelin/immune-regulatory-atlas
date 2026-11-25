@@ -1,0 +1,90 @@
+﻿from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class OllamaClientConfig(BaseModel):
+    base_url: str = Field(default="http://localhost:11434")
+    model: str = Field(default="qwen2.5:14b")
+    endpoint: Literal["chat", "generate"] = Field(default="chat")
+    timeout_seconds: float = Field(default=60.0, gt=0.0)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+
+
+class OllamaExplanationClient:
+    """Adapter implementing ExplanationLLMClient against a local Ollama server."""
+
+    def __init__(self, config: OllamaClientConfig | None = None) -> None:
+        self.config = config or OllamaClientConfig()
+
+    def _build_url(self) -> str:
+        base = self.config.base_url.rstrip("/")
+        if self.config.endpoint == "generate":
+            return f"{base}/api/generate"
+        return f"{base}/api/chat"
+
+    def _build_payload(self, *, system_prompt: str, user_payload_json: str) -> dict[str, object]:
+        user_prompt = (
+            "Render a concise Markdown summary strictly from this computed engine JSON.\n"
+            "Do not add new facts, statuses, probabilities, or causal claims.\n\n"
+            f"```json\n{user_payload_json}\n```"
+        )
+        options = {"temperature": self.config.temperature}
+
+        if self.config.endpoint == "generate":
+            return {
+                "model": self.config.model,
+                "system": system_prompt,
+                "prompt": user_prompt,
+                "stream": False,
+                "options": options,
+            }
+
+        return {
+            "model": self.config.model,
+            "stream": False,
+            "options": options,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+
+    def render_markdown(self, *, system_prompt: str, user_payload_json: str) -> str:
+        url = self._build_url()
+        body = json.dumps(
+            self._build_payload(system_prompt=system_prompt, user_payload_json=user_payload_json)
+        ).encode("utf-8")
+
+        req = urllib.request.Request(
+            url=url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.config.timeout_seconds) as resp:
+                raw_text = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
+            raise RuntimeError(f"Ollama HTTP error {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Failed to reach Ollama at {url}: {exc.reason}") from exc
+
+        data = json.loads(raw_text)
+        if self.config.endpoint == "generate":
+            content = data.get("response")
+        else:
+            message = data.get("message") or {}
+            content = message.get("content")
+
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Ollama returned an empty response payload.")
+
+        return content.strip()

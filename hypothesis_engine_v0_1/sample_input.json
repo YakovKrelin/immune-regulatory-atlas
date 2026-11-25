@@ -1,0 +1,41 @@
+{
+  "query_id": "Q-CLI-001",
+  "data_type": "purified_macrophage_culture",
+  "cell_composition_changed": false,
+  "timepoint_known": true,
+  "target": {
+    "entity": "IL6",
+    "level": "mRNA"
+  },
+  "context": {
+    "organism": "Homo sapiens",
+    "cell_type": "Macrophage",
+    "timepoint": "12h",
+    "condition": {
+      "oxygen": "Hypoxia",
+      "oxygen_level": "1% O2",
+      "duration": "12h"
+    },
+    "study_design": {
+      "control": "Normoxia"
+    }
+  },
+  "observations": [
+    {
+      "observation_id": "OBS-1",
+      "entity": "VEGFA",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "up",
+      "timepoint": "12h"
+    },
+    {
+      "observation_id": "OBS-2",
+      "entity": "SLC2A1",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "up",
+      "timepoint": "12h"
+    }
+  ]
+}

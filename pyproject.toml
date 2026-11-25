@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hypothesis-engine"
+version = "0.1.0"
+description = "Deterministic biological hypothesis evaluation engine with validated rendering and API/CLI interfaces."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "fastapi>=0.100",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.24",
+]
+
+[project.scripts]
+hypothesis-engine = "hypothesis_engine_v0_1.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hypothesis_engine_v0_1*"]
+
+[tool.coverage.run]
+source = ["hypothesis_engine_v0_1"]
