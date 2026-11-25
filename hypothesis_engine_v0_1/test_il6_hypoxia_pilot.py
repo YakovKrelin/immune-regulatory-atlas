@@ -173,3 +173,34 @@ def test_il1_pathway_not_assessed_when_il1_entities_absent() -> None:
     result = evaluate_il6_hypoxia_pilot(payload)
     assert result["il1_pathway"]["il1b_priming_status"] == "not_assessed"
     assert result["il1_pathway"]["il11_alpha_status"] if False else result["il1_pathway"]["il1_alpha_status"] == "not_assessed"
+
+def test_run_hypothesis_engine_populates_il1_pathway_and_pilot_hypotheses() -> None:
+    from hypothesis_engine_v0_1.engine import run_hypothesis_engine
+    from hypothesis_engine_v0_1.schemas import HypothesisEngineInput
+
+    payload = HypothesisEngineInput.model_validate(
+        {
+            "query_id": "BIOOS-INT-001",
+            "scenario": "IL6_hypoxia_macrophage",
+            "data_type": "bulk_rna_seq",
+            "target": {"entity": "IL6", "level": "mRNA"},
+            "context": {
+                "organism": "Homo sapiens",
+                "cell_type": "Macrophage",
+                "timepoint": "12h",
+                "condition": {"oxygen": "Hypoxia", "oxygen_level": "1% O2", "stimulus": "None"},
+            },
+            "observations": [
+                {"observation_id": "O1", "entity": "IL6", "assay": "RNA-seq", "level": "mRNA", "direction": "up", "value": 1.8, "unit": "log2FC", "fdr": 0.01},
+                {"observation_id": "O2", "entity": "HIF1A", "assay": "RNA-seq", "level": "mRNA", "direction": "up"},
+                {"observation_id": "O3", "entity": "IL1B", "assay": "RNA-seq", "level": "mRNA", "direction": "up"},
+            ],
+        }
+    )
+    out = run_hypothesis_engine(payload)
+    assert out.il1_pathway is not None
+    assert out.il1_pathway.il1b_priming_status == "observed"
+    assert out.pilot_hypotheses is not None
+    assert out.pilot_hypotheses["H1"].name == "HIF-associated IL6 regulation"
+    assert out.pilot_hypotheses["H4"].name == "Cell-composition shift"
+    assert out.pilot_hypotheses["H5"].active is True

@@ -315,6 +315,20 @@ class DiscriminatingMeasurement(BaseModel):
     rationale: str
 
 
+class IL1PathwayEvaluation(BaseModel):
+    il1b_priming_status: str
+    il1b_processing_status: str
+    il1b_secretion_status: str
+    il1_alpha_status: str
+    h3_data_status: str
+
+
+class PilotHypothesisSummary(BaseModel):
+    name: str
+    data_status: str | None = None
+    active: bool | None = None
+
+
 class HypothesisEngineOutput(BaseModel):
     query_id: str
     scenario: str
@@ -331,6 +345,8 @@ class HypothesisEngineOutput(BaseModel):
     discriminating_measurements: list[DiscriminatingMeasurement] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     model_prior_notes: list[ModelPriorKnowledgeNote] = Field(default_factory=list)
+    il1_pathway: IL1PathwayEvaluation | None = None
+    pilot_hypotheses: dict[str, PilotHypothesisSummary] | None = None
 
 
 def parse_oxygen_percent(oxygen_level: str | None) -> float | None:

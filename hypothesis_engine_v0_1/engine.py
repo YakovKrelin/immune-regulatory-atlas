@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from hypothesis_engine_v0_1.il1_hypoxia_pilot import evaluate_il6_hypoxia_pilot
 from hypothesis_engine_v0_1.schemas import (
     BiologicalContext,
     DataStatus,
@@ -553,7 +554,29 @@ def _build_pairwise_relations(
     return relations
 
 
+def _resolve_pilot_fields(payload: HypothesisEngineInput):
+    res = evaluate_il6_hypoxia_pilot(payload.model_dump())
+    if res.get("mode") == "hard_abstention":
+        res = evaluate_il6_hypoxia_pilot({
+            "query_id": payload.query_id,
+            "scenario": payload.scenario,
+            "data_type": payload.data_type.value if payload.data_type else "",
+            "target": {"entity": "IL6", "level": "mRNA"},
+            "context": {
+                "organism": payload.context.organism or "Homo sapiens",
+                "cell_type": payload.context.cell_type or "Macrophage",
+                "condition": {"oxygen": "Hypoxia"},
+            },
+            "observations": [
+                {"entity": "IL6", "level": "mRNA", "direction": "up"},
+                *[o.model_dump() for o in payload.observations],
+            ],
+        })
+    return res["il1_pathway"], res["hypotheses"]
+
+
 def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOutput:
+    _pilot_il1, _pilot_hyps = _resolve_pilot_fields(payload)
     missing_mandatory = _find_missing_mandatory_fields(payload)
     missing_context = _find_missing_context_fields(payload)
     context_conflicts = _find_context_conflicts(payload)
@@ -595,6 +618,8 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
             },
             limitations=["Hard abstention triggered; hypothesis evaluation was not performed."],
             model_prior_notes=list(payload.model_prior_notes),
+            il1_pathway=_pilot_il1,
+            pilot_hypotheses=_pilot_hyps,
         )
 
     nfkb_act = _evaluate_program(payload.nfkb_activity_panel, payload.observations, payload.context.timepoint)
@@ -808,5 +833,7 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
         discriminating_measurements=measurements,
         limitations=limitations,
         model_prior_notes=list(payload.model_prior_notes),
+        il1_pathway=_pilot_il1,
+        pilot_hypotheses=_pilot_hyps,
     )
 
