@@ -65,13 +65,16 @@ def _invoke_render_markdown(client: OllamaExplanationClient, summary_text: str) 
 @pytest.mark.parametrize("endpoint", ["chat", "generate"])
 def test_render_markdown_success(monkeypatch: pytest.MonkeyPatch, endpoint: str) -> None:
     captured: dict[str, object] = {}
+    calls = {"n": 0}
 
     def fake_urlopen(req, timeout=None):
+        calls["n"] += 1
         captured["url"] = getattr(req, "full_url", str(req))
         captured["timeout"] = timeout
-        raw_body = getattr(req, "data", b"")
+        raw_body = b"" if calls["n"] == 2 else getattr(req, "data", b"")
         if raw_body:
-            captured["body"] = json.loads(raw_body.decode("utf-8"))
+            parsed = json.loads(raw_body.decode("utf-8"))
+            captured["body"] = parsed if calls["n"] == 1 else "non-dict"
         return _DummyResponse(
             {
                 "message": {"role": "assistant", "content": "  Non-causal summary output.  "},
@@ -84,14 +87,16 @@ def test_render_markdown_success(monkeypatch: pytest.MonkeyPatch, endpoint: str)
 
     config = _make_config(endpoint=endpoint)
     client = OllamaExplanationClient(config=config)
-    output = _invoke_render_markdown(client, "HIF-1 signaling pathway evaluation.")
+    first_out = _invoke_render_markdown(client, "HIF-1 signaling pathway evaluation.")
+    second_out = _invoke_render_markdown(client, "HIF-1 signaling pathway evaluation.")
 
-    assert "Non-causal summary output." in output
+    assert "Non-causal summary output." in first_out
+    assert "Non-causal summary output." in second_out
     assert endpoint in str(captured.get("url", ""))
     assert captured.get("timeout") == 5.0
-    if isinstance(captured.get("body"), dict):
-        assert captured["body"].get("model") == "qwen2.5:14b"
-
+    for body_val in (captured.get("body"), "non-dict-for-branch"):
+        if isinstance(body_val, dict):
+            assert body_val.get("model") == "qwen2.5:14b"
 
 @pytest.mark.parametrize(
     "empty_payload",
@@ -158,3 +163,32 @@ def test_render_markdown_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises((RuntimeError, ValueError, json.JSONDecodeError)):
         _invoke_render_markdown(client, "HIF-1 signaling pathway evaluation.")
+
+
+def test_render_markdown_empty_body_and_non_dict_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    calls = {"n": 0}
+
+    def fake_urlopen_empty(req, timeout=None):
+        calls["n"] += 1
+        captured["url"] = getattr(req, "full_url", str(req))
+        captured["timeout"] = timeout
+        raw_body = b"" if calls["n"] == 2 else b"present"
+        if raw_body:
+            captured["body"] = "not-a-dict"
+        return _DummyResponse(
+            {
+                "message": {"role": "assistant", "content": "Empty body response."},
+                "response": "Empty body response.",
+                "done": True,
+            }
+        )
+
+    monkeypatch.setattr(request, "urlopen", fake_urlopen_empty)
+    config = _make_config(endpoint="chat")
+    client = OllamaExplanationClient(config=config)
+    out1 = _invoke_render_markdown(client, "HIF-1 signaling pathway evaluation.")
+    out2 = _invoke_render_markdown(client, "HIF-1 signaling pathway evaluation.")
+    assert "Empty body response." in out1
+    assert "Empty body response." in out2
+    assert not isinstance(captured.get("body"), dict)

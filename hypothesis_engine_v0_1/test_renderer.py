@@ -159,3 +159,25 @@ def test_renderer_abstention_missing_fields_and_conflicts_sections() -> None:
     assert "context.organism" in res.markdown
     assert "### Conflicts" in res.markdown
     assert "Oxygen mismatch" in res.markdown
+
+def test_renderer_empty_optional_sections_branches() -> None:
+    from hypothesis_engine_v0_1.renderer import render_deterministic_markdown
+    from hypothesis_engine_v0_1.schemas import HypothesisEngineOutput, InferenceMode
+
+    minimal_out = HypothesisEngineOutput(
+        query_id="Q-REN-EMPTY",
+        scenario="IL6_hypoxia_macrophage",
+        rule_set_version="v0.1",
+        mode=InferenceMode.WEAK_INFERENCE,
+        program_statuses={},
+        hypotheses={},
+        pairwise_relations=[],
+        discriminating_measurements=[],
+        limitations=[],
+    )
+    md = render_deterministic_markdown(minimal_out)
+    assert "Q-REN-EMPTY" in md
+    assert "### Hypotheses" not in md
+    assert "### Pairwise Relations" not in md
+    assert "### Priority Measurements" not in md
+    assert "### Limitations" not in md

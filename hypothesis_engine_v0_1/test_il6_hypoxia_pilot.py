@@ -204,3 +204,39 @@ def test_run_hypothesis_engine_populates_il1_pathway_and_pilot_hypotheses() -> N
     assert out.pilot_hypotheses["H1"].name == "HIF-associated IL6 regulation"
     assert out.pilot_hypotheses["H4"].name == "Cell-composition shift"
     assert out.pilot_hypotheses["H5"].active is True
+
+
+def test_il1a_non_up_direction_branch() -> None:
+    from hypothesis_engine_v0_1.il1_hypoxia_pilot import evaluate_il6_hypoxia_pilot
+
+    res = evaluate_il6_hypoxia_pilot(
+        {
+            "query_id": "PILOT-IL1A-DOWN",
+            "scenario": "IL6_hypoxia_macrophage",
+            "data_type": "bulk_rna_seq",
+            "target": {"entity": "IL6", "level": "mRNA"},
+            "context": {
+                "organism": "Homo sapiens",
+                "cell_type": "Macrophage",
+                "condition": {"oxygen": "Hypoxia", "oxygen_level": "1% O2", "stimulus": "None"},
+            },
+            "observations": [
+                {
+                    "observation_id": "O-IL6",
+                    "entity": "IL6",
+                    "assay": "RNA-seq",
+                    "level": "mRNA",
+                    "direction": "up",
+                },
+                {
+                    "observation_id": "O-IL1A",
+                    "entity": "IL1A",
+                    "assay": "RNA-seq",
+                    "level": "mRNA",
+                    "direction": "down",
+                },
+            ],
+        }
+    )
+    assert res["mode"] != "hard_abstention"
+    assert isinstance(res.get("il1_pathway"), dict)

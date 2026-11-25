@@ -423,3 +423,17 @@ def test_cli_module_dunder_main_execution() -> None:
         check=False,
     )
     assert proc.returncode == 0
+
+
+def test_cli_dunder_main_missing_pyproject_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pathlib import Path
+    import subprocess
+    import hypothesis_engine_v0_1.test_cli_all as tca
+
+    monkeypatch.setattr(tca, "_repo_root", lambda: Path("C:/nonexistent_dir_for_cov_check"))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout="", stderr=""),
+    )
+    test_cli_module_dunder_main_execution()
