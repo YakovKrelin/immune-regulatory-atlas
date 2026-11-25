@@ -1,0 +1,105 @@
+{
+  "query_id": "BIOOS-TEST-001",
+  "scenario": "IL6_hypoxia_macrophage",
+  "data_type": "bulk_rna_seq",
+  "target": {
+    "entity": "IL6",
+    "level": "mRNA"
+  },
+  "context": {
+    "organism": "Homo sapiens",
+    "cell_type": "Macrophage",
+    "cell_subtype": "Monocyte-derived macrophage",
+    "tissue": "Peripheral blood",
+    "compartment": "In vitro culture",
+    "condition": {
+      "oxygen": "Hypoxia",
+      "oxygen_level": "1% O2",
+      "duration": "12h",
+      "stimulus": "None",
+      "priming": "None",
+      "co_stimulus": "None"
+    },
+    "timepoint": "12h",
+    "sample_type": "Cell lysate and culture supernatant"
+  },
+  "observations": [
+    {
+      "observation_id": "OBS-001",
+      "entity": "IL6",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "increase",
+      "value": 1.8,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    },
+    {
+      "observation_id": "OBS-002",
+      "entity": "HIF1A",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "increase",
+      "value": 0.9,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    },
+    {
+      "observation_id": "OBS-003",
+      "entity": "VEGFA",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "increase",
+      "value": 1.2,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    },
+    {
+      "observation_id": "OBS-004",
+      "entity": "LDHA",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "increase",
+      "value": 1.1,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    },
+    {
+      "observation_id": "OBS-005",
+      "entity": "IL1B",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "increase",
+      "value": 1.4,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    },
+    {
+      "observation_id": "OBS-006",
+      "entity": "NFKBIA",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "no_change",
+      "value": 0.1,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    },
+    {
+      "observation_id": "OBS-007",
+      "entity": "TNFAIP3",
+      "assay": "RNA-seq",
+      "level": "mRNA",
+      "direction": "no_change",
+      "value": 0.2,
+      "unit": "log2FC",
+      "timepoint": "12h",
+      "source": "user_upload"
+    }
+  ]
+}
