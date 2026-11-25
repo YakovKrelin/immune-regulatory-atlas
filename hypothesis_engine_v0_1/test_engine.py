@@ -679,3 +679,63 @@ def test_extra_panel_not_measured_adds_limitation() -> None:
     out = run_hypothesis_engine(payload)
     assert out.program_statuses["UNMEASURED_EXTRA_PANEL"] == ProgramStatus.NOT_MEASURED
     assert any("UNMEASURED_EXTRA_PANEL" in item for item in out.limitations)
+
+
+def test_extra_panel_indeterminate_adds_limitation() -> None:
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        ConditionContext,
+        DataType,
+        HypothesisEngineInput,
+        MeasurementLevel,
+        Observation,
+        ProgramPanel,
+        ProgramStatus,
+        SignalDirection,
+        StudyDesignContext,
+        TargetSpec,
+    )
+
+    indeterminate_panel = ProgramPanel(
+        program_id="INDET_EXTRA_PANEL",
+        core_markers=["GENE_A", "GENE_B"],
+        min_core_up=2,
+        min_total_up=2,
+        min_measured_for_unchanged=1,
+    )
+    payload = HypothesisEngineInput(
+        query_id="Q-EXTRA-INDET",
+        data_type=DataType.PURIFIED_MACROPHAGE_CULTURE,
+        timepoint_known=True,
+        target=TargetSpec(entity="IL6", level=MeasurementLevel.MRNA),
+        context=BiologicalContext(
+            organism="Homo sapiens",
+            cell_type="macrophage",
+            timepoint="6h",
+            condition=ConditionContext(oxygen_level="1%"),
+            study_design=StudyDesignContext(control="normoxia_vehicle"),
+        ),
+        observations=[
+            Observation(
+                observation_id="OBS-A-UP",
+                assay="RNA-seq",
+                entity="GENE_A",
+                direction=SignalDirection.UP,
+                timepoint="6h",
+            ),
+            Observation(
+                observation_id="OBS-B-DOWN",
+                assay="RNA-seq",
+                entity="GENE_B",
+                direction=SignalDirection.DOWN,
+                timepoint="6h",
+            ),
+        ],
+        extra_panels=[indeterminate_panel],
+    )
+    out = run_hypothesis_engine(payload)
+    assert out.program_statuses["INDET_EXTRA_PANEL"] == ProgramStatus.INDETERMINATE
+    assert any(
+        "INDET_EXTRA_PANEL" in item and "indeterminate marker signals" in item
+        for item in out.limitations
+    )

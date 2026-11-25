@@ -652,9 +652,14 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
         "HIF and NF-kB pathways can cross-regulate.",
     ]
     for extra_panel in payload.extra_panels:
-        if program_statuses.get(extra_panel.program_id) == ProgramStatus.NOT_MEASURED:
+        extra_status = program_statuses.get(extra_panel.program_id)
+        if extra_status == ProgramStatus.NOT_MEASURED:
             limitations.append(
                 f"Extra panel '{extra_panel.program_id}' was not measured in current observations."
+            )
+        elif extra_status == ProgramStatus.INDETERMINATE:
+            limitations.append(
+                f"Extra panel '{extra_panel.program_id}' has indeterminate marker signals in current observations."
             )
 
     if not timepoint_known:

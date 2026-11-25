@@ -14,6 +14,8 @@ class OllamaClientConfig(BaseModel):
     endpoint: Literal["chat", "generate"] = Field(default="chat")
     timeout_seconds: float = Field(default=60.0, gt=0.0)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    num_predict: int | None = Field(default=None, ge=1)
+    seed: int | None = Field(default=None)
     keep_alive: str | int | None = Field(default=None)
 
 
@@ -35,7 +37,11 @@ class OllamaExplanationClient:
             "Do not add new facts, statuses, probabilities, or causal claims.\n\n"
             f"```json\n{user_payload_json}\n```"
         )
-        options = {"temperature": self.config.temperature}
+        options: dict[str, object] = {"temperature": self.config.temperature}
+        if self.config.num_predict is not None:
+            options["num_predict"] = self.config.num_predict
+        if self.config.seed is not None:
+            options["seed"] = self.config.seed
 
         if self.config.endpoint == "generate":
             payload: dict[str, object] = {
