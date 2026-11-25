@@ -15,6 +15,7 @@ class OllamaClientConfig(BaseModel):
     timeout_seconds: float = Field(default=60.0, gt=0.0)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     num_predict: int | None = Field(default=None, ge=1)
+    num_ctx: int | None = Field(default=None, ge=1)
     seed: int | None = Field(default=None)
     keep_alive: str | int | None = Field(default=None)
 
@@ -26,6 +27,7 @@ class OllamaClientConfig(BaseModel):
         timeout_seconds: float = 60.0,
         temperature: float = 0.1,
         num_predict: int | None = 1024,
+        num_ctx: int | None = 4096,
         seed: int | None = 42,
         keep_alive: str | int | None = "10m",
     ) -> "OllamaClientConfig":
@@ -35,6 +37,7 @@ class OllamaClientConfig(BaseModel):
             timeout_seconds=timeout_seconds,
             temperature=temperature,
             num_predict=num_predict,
+            num_ctx=num_ctx,
             seed=seed,
             keep_alive=keep_alive,
         )
@@ -61,6 +64,8 @@ class OllamaExplanationClient:
         options: dict[str, object] = {"temperature": self.config.temperature}
         if self.config.num_predict is not None:
             options["num_predict"] = self.config.num_predict
+        if self.config.num_ctx is not None:
+            options["num_ctx"] = self.config.num_ctx
         if self.config.seed is not None:
             options["seed"] = self.config.seed
 

@@ -124,7 +124,7 @@ def render_hypothesis_report(
                 user_payload_json=request.engine_output.model_dump_json(indent=2),
             )
             used_llm = True
-        except Exception:
+        except (RuntimeError, ValueError, TimeoutError, OSError):
             raw_markdown = render_deterministic_markdown(
                 request.engine_output,
                 max_bullets=request.max_bullets_per_section,
