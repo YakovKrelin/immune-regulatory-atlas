@@ -83,6 +83,7 @@ def _collect_allowed_markers(
         engine_input.nfkb_target_panel,
         engine_input.hif_panel,
         engine_input.orthogonal_state_panel,
+        *engine_input.extra_panels,
     ):
         markers.update(m.strip().upper() for m in panel.core_markers if m)
         markers.update(m.strip().upper() for m in panel.supporting_markers if m)

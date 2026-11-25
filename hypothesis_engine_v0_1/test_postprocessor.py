@@ -298,3 +298,60 @@ def test_postprocess_endpoint_valid_returns_response() -> None:
         )
     )
     assert resp.valid is True
+
+
+def test_postprocessor_allows_markers_from_extra_panels() -> None:
+    from hypothesis_engine_v0_1.engine import run_hypothesis_engine
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        ConditionContext,
+        DataType,
+        HypothesisEngineInput,
+        MeasurementLevel,
+        Observation,
+        ProgramPanel,
+        SignalDirection,
+        StudyDesignContext,
+        TargetSpec,
+    )
+
+    panel = ProgramPanel(
+        program_id="CUSTOM_PANEL_A",
+        core_markers=["MARKER_A1"],
+        min_core_up=1,
+        min_total_up=1,
+        min_measured_for_unchanged=1,
+    )
+    engine_input = HypothesisEngineInput(
+        query_id="Q-PP-EXTRA",
+        data_type=DataType.PURIFIED_MACROPHAGE_CULTURE,
+        timepoint_known=True,
+        target=TargetSpec(entity="IL6", level=MeasurementLevel.MRNA),
+        context=BiologicalContext(
+            organism="Homo sapiens",
+            cell_type="macrophage",
+            timepoint="4h",
+            condition=ConditionContext(oxygen_level="1%"),
+            study_design=StudyDesignContext(control="ctrl"),
+        ),
+        observations=[
+            Observation(
+                observation_id="OBS-A1",
+                assay="RNA-seq",
+                entity="MARKER_A1",
+                direction=SignalDirection.UP,
+                timepoint="4h",
+            )
+        ],
+        extra_panels=[panel],
+    )
+    engine_output = run_hypothesis_engine(engine_input)
+    res = validate_and_postprocess(
+        PostProcessorRequest(
+            engine_input=engine_input,
+            engine_output=engine_output.model_dump(mode="json"),
+            rendered_explanation="MARKER_A1 elevated in custom panel.",
+        )
+    )
+    assert res.valid is True
+    assert res.violations == []

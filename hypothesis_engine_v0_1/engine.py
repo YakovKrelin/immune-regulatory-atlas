@@ -629,12 +629,16 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
         payload.orthogonal_state_panel, payload.observations, payload.context.timepoint
     )
 
-    program_statuses = {
+    program_statuses: dict[str, ProgramStatus] = {
         "NFKB_ACTIVITY": nfkb_act,
         "NFKB_TARGET_PROGRAM": nfkb_tgt,
         "HIF_PROGRAM": hif_prog,
         "ORTHOGONAL_MACROPHAGE_STATE_PROGRAM": orth_prog,
     }
+    for extra_panel in payload.extra_panels:
+        program_statuses[extra_panel.program_id] = _evaluate_program(
+            extra_panel, payload.observations, payload.context.timepoint
+        )
 
     timepoint_known = _resolve_timepoint_known(payload)
     is_bulk = payload.data_type in {DataType.BULK_RNA_SEQ, DataType.BULK_TISSUE_RNA_SEQ}
@@ -647,6 +651,11 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
         "Causal attribution requires perturbation or intervention evidence.",
         "HIF and NF-kB pathways can cross-regulate.",
     ]
+    for extra_panel in payload.extra_panels:
+        if program_statuses.get(extra_panel.program_id) == ProgramStatus.NOT_MEASURED:
+            limitations.append(
+                f"Extra panel '{extra_panel.program_id}' was not measured in current observations."
+            )
 
     if not timepoint_known:
         limitations.append(

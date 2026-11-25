@@ -563,3 +563,119 @@ def test_engine_remaining_panel_and_r004_branches(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(eng, "_evaluate_program", _eval_with_hif_down)
     out = run_hypothesis_engine(payload)
     assert out.query_id == "Q-BR-004"
+
+
+def test_run_hypothesis_engine_evaluates_extra_panels_and_rejects_duplicate_ids() -> None:
+    from pydantic import ValidationError
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        ConditionContext,
+        DataType,
+        HypothesisEngineInput,
+        MeasurementLevel,
+        Observation,
+        ProgramPanel,
+        ProgramStatus,
+        SignalDirection,
+        StudyDesignContext,
+        TargetSpec,
+    )
+
+    extra_panel = ProgramPanel(
+        program_id="EXTRA_METABOLIC_PROGRAM",
+        core_markers=["PGK1"],
+        supporting_markers=["HK2"],
+        min_core_up=1,
+        min_total_up=1,
+        min_measured_for_unchanged=1,
+    )
+    payload = HypothesisEngineInput(
+        query_id="Q-EXTRA-1",
+        data_type=DataType.PURIFIED_MACROPHAGE_CULTURE,
+        timepoint_known=True,
+        target=TargetSpec(entity="IL6", level=MeasurementLevel.MRNA),
+        context=BiologicalContext(
+            organism="Homo sapiens",
+            cell_type="macrophage",
+            timepoint="6h",
+            condition=ConditionContext(oxygen_level="1%"),
+            study_design=StudyDesignContext(control="normoxia_vehicle"),
+        ),
+        observations=[
+            Observation(
+                observation_id="OBS-PGK1-1",
+                assay="RNA-seq",
+                entity="PGK1",
+                direction=SignalDirection.UP,
+                timepoint="6h",
+            )
+        ],
+        extra_panels=[extra_panel],
+    )
+    out = run_hypothesis_engine(payload)
+    assert out.program_statuses["EXTRA_METABOLIC_PROGRAM"] == ProgramStatus.UP
+
+    with pytest.raises(ValidationError, match="Duplicate program_id"):
+        HypothesisEngineInput(
+            query_id="Q-EXTRA-DUP",
+            target=TargetSpec(entity="IL6", level=MeasurementLevel.MRNA),
+            extra_panels=[
+                ProgramPanel(
+                    program_id="HIF_PROGRAM",
+                    core_markers=["PKM2"],
+                    min_core_up=1,
+                    min_total_up=1,
+                    min_measured_for_unchanged=1,
+                )
+            ],
+        )
+
+
+def test_extra_panel_not_measured_adds_limitation() -> None:
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        ConditionContext,
+        DataType,
+        HypothesisEngineInput,
+        MeasurementLevel,
+        Observation,
+        ProgramPanel,
+        ProgramStatus,
+        SignalDirection,
+        StudyDesignContext,
+        TargetSpec,
+    )
+
+    unmeasured_panel = ProgramPanel(
+        program_id="UNMEASURED_EXTRA_PANEL",
+        core_markers=["UNSEEN_GENE_1"],
+        min_core_up=1,
+        min_total_up=1,
+        min_measured_for_unchanged=1,
+    )
+    payload = HypothesisEngineInput(
+        query_id="Q-EXTRA-UNMEASURED",
+        data_type=DataType.PURIFIED_MACROPHAGE_CULTURE,
+        timepoint_known=True,
+        target=TargetSpec(entity="IL6", level=MeasurementLevel.MRNA),
+        context=BiologicalContext(
+            organism="Homo sapiens",
+            cell_type="macrophage",
+            timepoint="6h",
+            condition=ConditionContext(oxygen_level="1%"),
+            study_design=StudyDesignContext(control="normoxia_vehicle"),
+        ),
+        observations=[
+            Observation(
+                observation_id="OBS-PGK1-UNM",
+                assay="RNA-seq",
+                entity="PGK1",
+                direction=SignalDirection.UP,
+                timepoint="6h",
+            )
+        ],
+        extra_panels=[unmeasured_panel],
+    )
+    out = run_hypothesis_engine(payload)
+    assert out.program_statuses["UNMEASURED_EXTRA_PANEL"] == ProgramStatus.NOT_MEASURED
+    assert any("UNMEASURED_EXTRA_PANEL" in item for item in out.limitations)

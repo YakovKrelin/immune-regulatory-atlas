@@ -236,16 +236,22 @@ class HypothesisEngineInput(BaseModel):
     nfkb_target_panel: ProgramPanel = Field(default_factory=_default_nfkb_target_panel)
     hif_panel: ProgramPanel = Field(default_factory=_default_hif_panel)
     orthogonal_state_panel: ProgramPanel = Field(default_factory=_default_orthogonal_state_panel)
+    extra_panels: list[ProgramPanel] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_panels_and_target_circularity(self) -> HypothesisEngineInput:
-        panels = [
+        base_panels = [
             self.nfkb_activity_panel,
             self.nfkb_target_panel,
             self.hif_panel,
             self.orthogonal_state_panel,
         ]
-        for panel in panels:
+        seen_ids: set[str] = set()
+        for panel in base_panels + list(self.extra_panels):
+            pid_norm = panel.program_id.strip().upper()
+            if pid_norm in seen_ids:
+                raise ValueError(f"Duplicate program_id '{panel.program_id}' across panels.")
+            seen_ids.add(pid_norm)
             all_markers = panel.core_markers + panel.supporting_markers
             if not all_markers:
                 raise ValueError(f"Panel '{panel.program_id}' must define at least one marker.")
@@ -255,6 +261,7 @@ class HypothesisEngineInput(BaseModel):
                 raise ValueError(
                     f"Target entity '{self.target.entity}' cannot appear in panel '{panel.program_id}'."
                 )
+        panels = base_panels
 
         forbidden = (
             {m.upper() for m in self.hif_panel.core_markers + self.hif_panel.supporting_markers}

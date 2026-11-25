@@ -192,3 +192,44 @@ def test_render_markdown_empty_body_and_non_dict_body(monkeypatch: pytest.Monkey
     assert "Empty body response." in out1
     assert "Empty body response." in out2
     assert not isinstance(captured.get("body"), dict)
+
+
+def test_render_markdown_includes_keep_alive_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import json
+    import urllib.request
+    from hypothesis_engine_v0_1.ollama_client import OllamaClientConfig, OllamaExplanationClient
+
+    captured: dict[str, object] = {}
+
+    class _DummyResp:
+        def __init__(self, body: bytes) -> None:
+            self._stream = io.BytesIO(body)
+
+        def read(self) -> bytes:
+            return self._stream.read()
+
+        def __enter__(self) -> "_DummyResp":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def _fake_urlopen(req: urllib.request.Request, timeout: float = 0.0) -> _DummyResp:
+        captured["timeout"] = timeout
+        captured["body"] = json.loads((req.data or b"{}").decode("utf-8"))
+        return _DummyResp(json.dumps({"message": {"content": "OK markdown"}}).encode("utf-8"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    client = OllamaExplanationClient(
+        OllamaClientConfig(
+            model="qwen2.5:14b",
+            keep_alive="15m",
+            timeout_seconds=12.0,
+        )
+    )
+    out = client.render_markdown(system_prompt="sys", user_payload_json='{"k":"v"}')
+    assert out == "OK markdown"
+    assert captured["timeout"] == 12.0
+    assert isinstance(captured["body"], dict)
+    assert captured["body"]["keep_alive"] == "15m"

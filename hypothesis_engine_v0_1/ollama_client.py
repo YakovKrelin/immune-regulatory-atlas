@@ -14,6 +14,7 @@ class OllamaClientConfig(BaseModel):
     endpoint: Literal["chat", "generate"] = Field(default="chat")
     timeout_seconds: float = Field(default=60.0, gt=0.0)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    keep_alive: str | int | None = Field(default=None)
 
 
 class OllamaExplanationClient:
@@ -37,23 +38,28 @@ class OllamaExplanationClient:
         options = {"temperature": self.config.temperature}
 
         if self.config.endpoint == "generate":
-            return {
+            payload: dict[str, object] = {
                 "model": self.config.model,
                 "system": system_prompt,
                 "prompt": user_prompt,
                 "stream": False,
                 "options": options,
             }
+        else:
+            payload = {
+                "model": self.config.model,
+                "stream": False,
+                "options": options,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            }
 
-        return {
-            "model": self.config.model,
-            "stream": False,
-            "options": options,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        }
+        if self.config.keep_alive is not None:
+            payload["keep_alive"] = self.config.keep_alive
+
+        return payload
 
     def render_markdown(self, *, system_prompt: str, user_payload_json: str) -> str:
         url = self._build_url()
