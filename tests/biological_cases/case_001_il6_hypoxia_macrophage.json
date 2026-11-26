@@ -1,0 +1,29 @@
+{
+  "case_id": "case_001_il6_hypoxia_macrophage",
+  "category": "positive_mechanism",
+  "input": {
+    "organism": "Mus musculus",
+    "cell_type": "macrophage",
+    "target": "IL6",
+    "measurement_level": "mRNA",
+    "control_or_reference_condition": "normoxia_control",
+    "condition": {
+      "oxygen": "Hypoxia",
+      "oxygen_level": "1% O2"
+    }
+  },
+  "expected": {
+    "mode": "weak_inference",
+    "branch_statuses": {
+      "H1": {
+        "branch_applicability": "applicable",
+        "data_status": "compatible"
+      }
+    },
+    "conflicts": []
+  },
+  "forbidden_claims": [
+    "IL6 is elevated because of HIF1A",
+    "H1 is supported as proven causation"
+  ]
+}

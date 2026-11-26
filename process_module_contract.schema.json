@@ -1,0 +1,428 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://immune-regulatory-atlas.local/schemas/process_module_contract.schema.json",
+  "title": "ProcessModuleContract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module_id",
+    "version",
+    "rule_set_id",
+    "rule_set_version",
+    "description",
+    "scenario",
+    "required_context",
+    "recommended_context",
+    "allowed_measurement_levels",
+    "branches",
+    "conflict_rules",
+    "abstention_rules",
+    "pairwise_relations",
+    "discriminating_measurements",
+    "regression_cases"
+  ],
+  "properties": {
+    "module_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "rule_set_id": { "type": "string", "minLength": 1 },
+    "rule_set_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "description": { "type": "string", "minLength": 1 },
+    "scenario": { "type": "string", "minLength": 1 },
+    "required_context": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "recommended_context": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "allowed_measurement_levels": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/MeasurementLevel" }
+    },
+    "branches": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/BranchDefinition" }
+    },
+    "conflict_rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ConflictRule" }
+    },
+    "abstention_rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/AbstentionRule" }
+    },
+    "pairwise_relations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PairwiseRelation" }
+    },
+    "discriminating_measurements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DiscriminatingMeasurement" }
+    },
+    "regression_cases": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "MeasurementLevel": {
+      "type": "string",
+      "enum": [
+        "mRNA",
+        "total_protein",
+        "secreted_protein",
+        "pathway_activity",
+        "cell_proportion"
+      ]
+    },
+    "BranchApplicability": {
+      "type": "string",
+      "enum": [
+        "applicable",
+        "not_applicable"
+      ]
+    },
+    "EvidenceStatus": {
+      "type": "string",
+      "enum": [
+        "supported",
+        "plausible",
+        "contradicted",
+        "not_assessed"
+      ]
+    },
+    "DataStatus": {
+      "type": "string",
+      "enum": [
+        "supported",
+        "compatible",
+        "not_supported_by_data",
+        "contradicted",
+        "not_assessed"
+      ]
+    },
+    "DecisionStatus": {
+      "type": "string",
+      "enum": [
+        "selectable",
+        "weakly_supported",
+        "not_supported_by_data",
+        "not_assessed",
+        "indistinguishable_from_other_branches"
+      ]
+    },
+    "ExpectedDirection": {
+      "type": "string",
+      "enum": [
+        "up",
+        "down",
+        "unchanged"
+      ]
+    },
+    "ContextOperator": {
+      "type": "string",
+      "enum": [
+        "equals",
+        "not_equals",
+        "in",
+        "not_in",
+        "missing",
+        "present"
+      ]
+    },
+    "ConflictType": {
+      "type": "string",
+      "enum": [
+        "context_conflict",
+        "measurement_level_conflict",
+        "direction_conflict",
+        "composition_conflict",
+        "competing_branch_conflict",
+        "evidence_conflict",
+        "rule_conflict"
+      ]
+    },
+    "ConflictDecision": {
+      "type": "string",
+      "enum": [
+        "hard_abstention",
+        "preserve_conflict",
+        "weak_inference",
+        "conditional_inference"
+      ]
+    },
+    "InferenceMode": {
+      "type": "string",
+      "enum": [
+        "hard_abstention",
+        "weak_inference",
+        "conditional_inference"
+      ]
+    },
+    "PairwiseRelationType": {
+      "type": "string",
+      "enum": [
+        "non_exclusive_not_separable",
+        "indistinguishable_with_current_data",
+        "distinguishable_with_current_data",
+        "not_assessed"
+      ]
+    },
+    "ContextRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "operator"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "operator": { "$ref": "#/$defs/ContextOperator" },
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": { "enum": ["missing", "present"] }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "properties": { "value": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": { "enum": ["equals", "not_equals", "in", "not_in"] }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "required": ["value"],
+            "not": { "properties": { "value": { "type": "null" } } }
+          }
+        }
+      ]
+    },
+    "MeasurementRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "level", "requirement"],
+      "properties": {
+        "entity": { "type": "string", "minLength": 1 },
+        "level": { "$ref": "#/$defs/MeasurementLevel" },
+        "requirement": {
+          "type": "string",
+          "enum": ["required", "optional", "forbidden"]
+        }
+      }
+    },
+    "DirectionExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "expected_direction", "interpretation"],
+      "properties": {
+        "entity": { "type": "string", "minLength": 1 },
+        "expected_direction": { "$ref": "#/$defs/ExpectedDirection" },
+        "interpretation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "EvidenceRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "required", "minimum_replication", "translational_status"],
+      "properties": {
+        "evidence_type": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "minimum_replication": { "type": "integer", "minimum": 0 },
+        "translational_status": { "type": "string", "minLength": 1 }
+      }
+    },
+    "StatusOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branch_applicability": {
+          "anyOf": [
+            { "$ref": "#/$defs/BranchApplicability" },
+            { "type": "null" }
+          ]
+        },
+        "evidence_status": {
+          "anyOf": [
+            { "$ref": "#/$defs/EvidenceStatus" },
+            { "type": "null" }
+          ]
+        },
+        "data_status": {
+          "anyOf": [
+            { "$ref": "#/$defs/DataStatus" },
+            { "type": "null" }
+          ]
+        },
+        "decision_status": {
+          "anyOf": [
+            { "$ref": "#/$defs/DecisionStatus" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "OutputRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "condition_expr", "then", "rationale"],
+      "properties": {
+        "rule_id": { "type": "string", "minLength": 1 },
+        "condition_expr": { "type": "string", "minLength": 1 },
+        "then": { "$ref": "#/$defs/StatusOutcome" },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "BranchDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch_id",
+        "name",
+        "biological_claim",
+        "applies_when",
+        "measurement_requirements",
+        "direction_expectations",
+        "evidence_requirements",
+        "output_rules"
+      ],
+      "properties": {
+        "branch_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "biological_claim": { "type": "string", "minLength": 1 },
+        "applies_when": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ContextRule" }
+        },
+        "measurement_requirements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MeasurementRequirement" }
+        },
+        "direction_expectations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DirectionExpectation" }
+        },
+        "evidence_requirements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceRequirement" }
+        },
+        "output_rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputRule" }
+        }
+      }
+    },
+    "ConflictRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conflict_id",
+        "conflict_type",
+        "trigger",
+        "affected_branches",
+        "decision",
+        "resolution_required"
+      ],
+      "properties": {
+        "conflict_id": { "type": "string", "minLength": 1 },
+        "conflict_type": { "$ref": "#/$defs/ConflictType" },
+        "trigger": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ContextRule" }
+        },
+        "affected_branches": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "decision": { "$ref": "#/$defs/ConflictDecision" },
+        "resolution_required": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "AbstentionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "condition",
+        "mode",
+        "reason",
+        "required_measurements"
+      ],
+      "properties": {
+        "rule_id": { "type": "string", "minLength": 1 },
+        "condition": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ContextRule" }
+        },
+        "mode": { "$ref": "#/$defs/InferenceMode" },
+        "reason": { "type": "string", "minLength": 1 },
+        "required_measurements": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "PairwiseRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch_ids",
+        "relation",
+        "reason",
+        "discriminating_measurement"
+      ],
+      "properties": {
+        "branch_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "relation": { "$ref": "#/$defs/PairwiseRelationType" },
+        "reason": { "type": "string", "minLength": 1 },
+        "discriminating_measurement": {
+          "anyOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "DiscriminatingMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measurement_id",
+        "priority",
+        "measurement",
+        "method",
+        "discriminates",
+        "rationale",
+        "data_type_condition"
+      ],
+      "properties": {
+        "measurement_id": { "type": "string", "minLength": 1 },
+        "priority": { "type": "integer", "minimum": 1 },
+        "measurement": { "type": "string", "minLength": 1 },
+        "method": { "type": "string", "minLength": 1 },
+        "discriminates": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "rationale": { "type": "string", "minLength": 1 },
+        "data_type_condition": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

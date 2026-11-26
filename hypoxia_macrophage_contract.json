@@ -1,0 +1,242 @@
+{
+  "module_id": "hypoxia_macrophage",
+  "version": "0.1.0",
+  "rule_set_id": "IL6_hypoxia_macrophage_rules",
+  "rule_set_version": "1.1.0",
+  "description": "Competing mechanisms and context constraints for IL6 elevation in macrophages under hypoxia.",
+  "scenario": "IL6_hypoxia_macrophage",
+  "required_context": [
+    "organism",
+    "cell_type",
+    "target",
+    "measurement_level",
+    "control_or_reference_condition"
+  ],
+  "recommended_context": [
+    "oxygen_level",
+    "duration",
+    "timepoint",
+    "cell_subtype",
+    "tissue",
+    "stimulus",
+    "priming",
+    "co_stimulus",
+    "sample_type",
+    "data_type",
+    "replicates",
+    "batch"
+  ],
+  "allowed_measurement_levels": [
+    "mRNA",
+    "total_protein",
+    "secreted_protein",
+    "pathway_activity",
+    "cell_proportion"
+  ],
+  "branches": [
+    {
+      "branch_id": "H1",
+      "name": "HIF-associated IL6 regulation",
+      "biological_claim": "IL6 elevation is compatible with a HIF-associated regulatory program under hypoxia.",
+      "applies_when": [
+        {
+          "field": "condition.oxygen",
+          "operator": "equals",
+          "value": "Hypoxia"
+        }
+      ],
+      "measurement_requirements": [
+        {
+          "entity": "HIF1A",
+          "level": "pathway_activity",
+          "requirement": "optional"
+        },
+        {
+          "entity": "VEGFA",
+          "level": "mRNA",
+          "requirement": "optional"
+        },
+        {
+          "entity": "SLC2A1",
+          "level": "mRNA",
+          "requirement": "optional"
+        },
+        {
+          "entity": "LDHA",
+          "level": "mRNA",
+          "requirement": "optional"
+        }
+      ],
+      "direction_expectations": [
+        {
+          "entity": "VEGFA",
+          "expected_direction": "up",
+          "interpretation": "supports_hif_program_as_manipulation_check"
+        },
+        {
+          "entity": "SLC2A1",
+          "expected_direction": "up",
+          "interpretation": "supports_hif_program_as_manipulation_check"
+        },
+        {
+          "entity": "LDHA",
+          "expected_direction": "up",
+          "interpretation": "supports_hif_program_as_manipulation_check"
+        }
+      ],
+      "evidence_requirements": [
+        {
+          "evidence_type": "direct_experiment",
+          "required": false,
+          "minimum_replication": 1,
+          "translational_status": "any"
+        }
+      ],
+      "output_rules": [
+        {
+          "rule_id": "R001",
+          "condition_expr": "hif_program_up",
+          "then": {
+            "branch_applicability": "applicable",
+            "data_status": "compatible"
+          },
+          "rationale": "HIF-target induction confirms hypoxic signaling but does not establish causality for IL6."
+        },
+        {
+          "rule_id": "R002",
+          "condition_expr": "hif_program_up_and_nfkb_program_unchanged",
+          "then": {
+            "branch_applicability": "applicable",
+            "data_status": "compatible",
+            "decision_status": "weakly_supported"
+          },
+          "rationale": "Compatible with HIF pathway activity without NF-kB signature, but insufficient as causal proof."
+        }
+      ]
+    },
+    {
+      "branch_id": "H2",
+      "name": "NF-kB-associated IL6 regulation",
+      "biological_claim": "IL6 elevation is compatible with NF-kB pathway activation in macrophages.",
+      "applies_when": [
+        {
+          "field": "cell_type",
+          "operator": "present"
+        }
+      ],
+      "measurement_requirements": [
+        {
+          "entity": "NFKB1",
+          "level": "pathway_activity",
+          "requirement": "optional"
+        }
+      ],
+      "direction_expectations": [
+        {
+          "entity": "IL6",
+          "expected_direction": "up",
+          "interpretation": "compatible_with_nfkb_activation"
+        }
+      ],
+      "evidence_requirements": [
+        {
+          "evidence_type": "direct_experiment",
+          "required": false,
+          "minimum_replication": 1,
+          "translational_status": "any"
+        }
+      ],
+      "output_rules": [
+        {
+          "rule_id": "R003",
+          "condition_expr": "nfkb_program_up",
+          "then": {
+            "branch_applicability": "applicable",
+            "data_status": "compatible"
+          },
+          "rationale": "NF-kB target induction is compatible with IL6 transcription without establishing sole causality."
+        }
+      ]
+    }
+  ],
+  "conflict_rules": [
+    {
+      "conflict_id": "C001",
+      "conflict_type": "context_conflict",
+      "trigger": [
+        {
+          "field": "condition.oxygen",
+          "operator": "equals",
+          "value": "Hypoxia"
+        },
+        {
+          "field": "condition.oxygen_level",
+          "operator": "equals",
+          "value": "Normoxia"
+        }
+      ],
+      "affected_branches": ["H1", "H2"],
+      "decision": "hard_abstention",
+      "resolution_required": [
+        "Resolve contradictory oxygen specification between condition.oxygen and condition.oxygen_level."
+      ]
+    }
+  ],
+  "abstention_rules": [
+    {
+      "rule_id": "A001",
+      "condition": [
+        {
+          "field": "organism",
+          "operator": "missing"
+        }
+      ],
+      "mode": "hard_abstention",
+      "reason": "Organism is required to interpret species-specific biological mechanisms.",
+      "required_measurements": []
+    },
+    {
+      "rule_id": "A002",
+      "condition": [
+        {
+          "field": "measurement_level",
+          "operator": "equals",
+          "value": "mRNA"
+        },
+        {
+          "field": "target.level",
+          "operator": "equals",
+          "value": "secreted_protein"
+        }
+      ],
+      "mode": "weak_inference",
+      "reason": "mRNA measurement alone cannot establish secreted protein endpoint.",
+      "required_measurements": [
+        "Secreted IL6 protein"
+      ]
+    }
+  ],
+  "pairwise_relations": [
+    {
+      "branch_ids": ["H1", "H2"],
+      "relation": "non_exclusive_not_separable",
+      "reason": "HIF and NF-kB can cross-regulate and co-occur; observational data cannot apportion causal contribution.",
+      "discriminating_measurement": "M001"
+    }
+  ],
+  "discriminating_measurements": [
+    {
+      "measurement_id": "M001",
+      "priority": 1,
+      "measurement": "Secreted IL6 protein",
+      "method": "ELISA",
+      "discriminates": ["H1", "H2"],
+      "rationale": "Establishes whether IL6 mRNA induction corresponds to secreted IL6 protein.",
+      "data_type_condition": "any"
+    }
+  ],
+  "regression_cases": [
+    "case_001_il6_hypoxia_macrophage",
+    "case_002_normoxia_21pct_conflict"
+  ]
+}
