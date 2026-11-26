@@ -284,25 +284,28 @@ def test_config_for_qwen25_14b_defaults_and_overrides() -> None:
     default_cfg = OllamaClientConfig.for_qwen25_14b()
     assert default_cfg.model == "qwen2.5:14b"
     assert default_cfg.temperature == 0.1
+    assert default_cfg.top_p == 0.9
     assert default_cfg.num_predict == 1024
     assert default_cfg.num_ctx == 4096
     assert default_cfg.seed == 42
     assert default_cfg.keep_alive == "10m"
 
     custom_cfg = OllamaClientConfig.for_qwen25_14b(
+        top_p=0.5,
         num_predict=512,
         num_ctx=8192,
         seed=7,
         keep_alive=0,
     )
     assert custom_cfg.model == "qwen2.5:14b"
+    assert custom_cfg.top_p == 0.5
     assert custom_cfg.num_predict == 512
     assert custom_cfg.num_ctx == 8192
     assert custom_cfg.seed == 7
     assert custom_cfg.keep_alive == 0
 
 
-def test_num_ctx_included_in_options_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_num_ctx_and_top_p_included_in_options_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_urlopen(req: request.Request, timeout: float = 0.0) -> _DummyResponse:
@@ -312,10 +315,11 @@ def test_num_ctx_included_in_options_when_set(monkeypatch: pytest.MonkeyPatch) -
         return _DummyResponse({"message": {"role": "assistant", "content": "ok"}, "done": True})
 
     monkeypatch.setattr(request, "urlopen", fake_urlopen)
-    cfg = OllamaClientConfig(model="qwen2.5:14b", num_ctx=4096)
+    cfg = OllamaClientConfig(model="qwen2.5:14b", top_p=0.85, num_ctx=4096)
     client = OllamaExplanationClient(config=cfg)
     out = client.render_markdown(system_prompt="sys", user_payload_json='{"ok": true}')
     assert out == "ok"
     options = captured.get("options")
     assert isinstance(options, dict)
+    assert options.get("top_p") == 0.85
     assert options.get("num_ctx") == 4096

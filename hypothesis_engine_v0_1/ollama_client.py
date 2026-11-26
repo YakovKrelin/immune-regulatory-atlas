@@ -14,6 +14,7 @@ class OllamaClientConfig(BaseModel):
     endpoint: Literal["chat", "generate"] = Field(default="chat")
     timeout_seconds: float = Field(default=60.0, gt=0.0)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     num_predict: int | None = Field(default=None, ge=1)
     num_ctx: int | None = Field(default=None, ge=1)
     seed: int | None = Field(default=None)
@@ -26,6 +27,7 @@ class OllamaClientConfig(BaseModel):
         base_url: str = "http://127.0.0.1:11434",
         timeout_seconds: float = 60.0,
         temperature: float = 0.1,
+        top_p: float | None = 0.9,
         num_predict: int | None = 1024,
         num_ctx: int | None = 4096,
         seed: int | None = 42,
@@ -36,6 +38,7 @@ class OllamaClientConfig(BaseModel):
             model="qwen2.5:14b",
             timeout_seconds=timeout_seconds,
             temperature=temperature,
+            top_p=top_p,
             num_predict=num_predict,
             num_ctx=num_ctx,
             seed=seed,
@@ -62,6 +65,8 @@ class OllamaExplanationClient:
             f"```json\n{user_payload_json}\n```"
         )
         options: dict[str, object] = {"temperature": self.config.temperature}
+        if self.config.top_p is not None:
+            options["top_p"] = self.config.top_p
         if self.config.num_predict is not None:
             options["num_predict"] = self.config.num_predict
         if self.config.num_ctx is not None:
