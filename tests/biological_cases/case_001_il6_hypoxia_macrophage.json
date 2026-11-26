@@ -1,4 +1,4 @@
-{
+﻿{
   "case_id": "case_001_il6_hypoxia_macrophage",
   "category": "positive_mechanism",
   "input": {
@@ -10,13 +10,63 @@
     "condition": {
       "oxygen": "Hypoxia",
       "oxygen_level": "1% O2"
-    }
+    },
+    "observations": [
+      {
+        "observation_id": "obs_1",
+        "entity": "VEGFA",
+        "assay": "rna_seq",
+        "direction": "up",
+        "timepoint": "12h"
+      },
+      {
+        "observation_id": "obs_2",
+        "entity": "SLC2A1",
+        "assay": "rna_seq",
+        "direction": "up",
+        "timepoint": "12h"
+      },
+      {
+        "observation_id": "obs_3",
+        "entity": "P65_PHOSPHO",
+        "assay": "immunoblot",
+        "direction": "up",
+        "timepoint": "12h"
+      },
+      {
+        "observation_id": "obs_4",
+        "entity": "IKBA_DEGRADATION",
+        "assay": "immunoblot",
+        "direction": "up",
+        "timepoint": "12h"
+      },
+      {
+        "observation_id": "obs_5",
+        "entity": "NFKBIA",
+        "assay": "rna_seq",
+        "direction": "up",
+        "timepoint": "12h"
+      },
+      {
+        "observation_id": "obs_6",
+        "entity": "TNFAIP3",
+        "assay": "rna_seq",
+        "direction": "up",
+        "timepoint": "12h"
+      },
+      {
+        "observation_id": "obs_7",
+        "entity": "IL6",
+        "assay": "rna_seq",
+        "direction": "up",
+        "timepoint": "12h"
+      }
+    ]
   },
   "expected": {
     "mode": "weak_inference",
     "branch_statuses": {
       "H1": {
-        "branch_applicability": "applicable",
         "data_status": "compatible"
       }
     },

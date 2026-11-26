@@ -33,7 +33,10 @@ def _parse_float(raw: str | None) -> float | None:
     val = raw.strip()
     if not val or val.lower() in {"na", "nan", "none", "null"}:
         return None
-    return float(val)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
 
 
 def _parse_level(raw: str | None, fallback: MeasurementLevel) -> MeasurementLevel:

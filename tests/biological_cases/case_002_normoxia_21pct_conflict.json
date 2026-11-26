@@ -1,4 +1,4 @@
-{
+﻿{
   "case_id": "case_002_normoxia_21pct_conflict",
   "category": "conflict",
   "input": {
@@ -9,13 +9,13 @@
     "control_or_reference_condition": "baseline_media",
     "condition": {
       "oxygen": "Hypoxia",
-      "oxygen_level": "Normoxia"
+      "oxygen_level": "21% O2"
     }
   },
   "expected": {
     "mode": "hard_abstention",
     "branch_statuses": {},
-    "conflicts": ["C001"]
+    "conflicts": ["21% O2"]
   },
   "forbidden_claims": [
     "Hypoxia response confirmed at 21% O2"
