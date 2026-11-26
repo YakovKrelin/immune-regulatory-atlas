@@ -801,6 +801,66 @@ def test_extra_panel_up_adds_limitation() -> None:
     )
 
 
+def test_extra_panel_down_adds_limitation() -> None:
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        ConditionContext,
+        DataType,
+        HypothesisEngineInput,
+        MeasurementLevel,
+        Observation,
+        ProgramPanel,
+        ProgramStatus,
+        SignalDirection,
+        StudyDesignContext,
+        TargetSpec,
+    )
+
+    suppressed_panel = ProgramPanel(
+        program_id="DOWN_EXTRA_PANEL",
+        core_markers=["MARKER_DN_1", "MARKER_DN_2"],
+        min_core_up=1,
+        min_total_up=1,
+        min_measured_for_unchanged=1,
+    )
+    payload = HypothesisEngineInput(
+        query_id="Q-EXTRA-DOWN",
+        data_type=DataType.PURIFIED_MACROPHAGE_CULTURE,
+        timepoint_known=True,
+        target=TargetSpec(entity="IL6", level=MeasurementLevel.MRNA),
+        context=BiologicalContext(
+            organism="Homo sapiens",
+            cell_type="macrophage",
+            timepoint="6h",
+            condition=ConditionContext(oxygen_level="1%"),
+            study_design=StudyDesignContext(control="normoxia_vehicle"),
+        ),
+        observations=[
+            Observation(
+                observation_id="OBS-DN-1",
+                assay="RNA-seq",
+                entity="MARKER_DN_1",
+                direction=SignalDirection.DOWN,
+                timepoint="6h",
+            ),
+            Observation(
+                observation_id="OBS-DN-2",
+                assay="RNA-seq",
+                entity="MARKER_DN_2",
+                direction=SignalDirection.DOWN,
+                timepoint="6h",
+            ),
+        ],
+        extra_panels=[suppressed_panel],
+    )
+    out = run_hypothesis_engine(payload)
+    assert out.program_statuses["DOWN_EXTRA_PANEL"] == ProgramStatus.DOWN
+    assert any(
+        "DOWN_EXTRA_PANEL" in item and "downregulated (DOWN)" in item
+        for item in out.limitations
+    )
+
+
 def test_extra_panel_unchanged_does_not_add_active_limitation() -> None:
     from hypothesis_engine_v0_1.schemas import (
         BiologicalContext,

@@ -665,6 +665,10 @@ def run_hypothesis_engine(payload: HypothesisEngineInput) -> HypothesisEngineOut
             limitations.append(
                 f"Extra panel '{extra_panel.program_id}' is active (UP); evaluate its contribution separately from core hypotheses."
             )
+        elif extra_status == ProgramStatus.DOWN:
+            limitations.append(
+                f"Extra panel '{extra_panel.program_id}' is downregulated (DOWN); evaluate its suppression separately from core hypotheses."
+            )
 
     if not timepoint_known:
         limitations.append(
