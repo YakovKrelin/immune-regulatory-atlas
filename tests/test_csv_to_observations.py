@@ -616,18 +616,57 @@ def test_csv_e2e_dict_payload_branches_and_helper_object_lookup(tmp_path: Path, 
 
     real_build_payload = globals()["_build_payload"]
 
+    class _AttrPayload:
+        def __init__(self, data: dict):
+            self._data = data
+            self.data_type = None
+            self.cell_composition_changed = False
+
+        def keys(self):
+            return self._data.keys()
+
+        def __getitem__(self, key):
+            if key == "data_type":
+                return self.data_type
+            if key == "cell_composition_changed":
+                return self.cell_composition_changed
+            return self._data[key]
+
+    call_idx = {"n": 0}
+
     def _dict_build_payload(*args, **kwargs):
+        call_idx["n"] += 1
         res = real_build_payload(*args, **kwargs)
-        if hasattr(res, "model_dump"):
-            dumped = res.model_dump()
-            dumped.pop("data_type", None)
-            dumped.pop("cell_composition_changed", None)
-            return dumped
-        return dict(res)
+        dumped = res.model_dump() if hasattr(res, "model_dump") else dict(res)
+        dumped.pop("data_type", None)
+        dumped.pop("cell_composition_changed", None)
+        if call_idx["n"] == 1:
+            return _AttrPayload(dumped)
+        return dumped
 
     monkeypatch.setitem(globals(), "_build_payload", _dict_build_payload)
     try:
-        pl = _build_payload(
+        attr_pl = _build_payload(
+            schemas,
+            query_id="q_attr_run",
+            scenario="scen_attr_run",
+            target_entity="IL6",
+            context=ctx,
+            observations=observations,
+            orthogonal_state_panel=_build_orthogonal_panel(schemas),
+        )
+        if hasattr(attr_pl, "data_type"):
+            attr_pl.data_type = bulk_dt
+        elif isinstance(attr_pl, dict):
+            attr_pl["data_type"] = bulk_dt
+        if hasattr(attr_pl, "cell_composition_changed"):
+            attr_pl.cell_composition_changed = True
+        elif isinstance(attr_pl, dict):
+            attr_pl["cell_composition_changed"] = True
+        assert attr_pl.data_type == bulk_dt
+        assert attr_pl.cell_composition_changed is True
+
+        dict_pl = _build_payload(
             schemas,
             query_id="q_dict_run",
             scenario="scen_dict_run",
@@ -636,15 +675,15 @@ def test_csv_e2e_dict_payload_branches_and_helper_object_lookup(tmp_path: Path, 
             observations=observations,
             orthogonal_state_panel=_build_orthogonal_panel(schemas),
         )
-        if hasattr(pl, "data_type"):
-            pl.data_type = bulk_dt
-        elif isinstance(pl, dict):
-            pl["data_type"] = bulk_dt
-        if hasattr(pl, "cell_composition_changed"):
-            pl.cell_composition_changed = True
-        elif isinstance(pl, dict):
-            pl["cell_composition_changed"] = True
-        eng.run_hypothesis_engine(pl)
+        if hasattr(dict_pl, "data_type"):
+            dict_pl.data_type = bulk_dt
+        elif isinstance(dict_pl, dict):
+            dict_pl["data_type"] = bulk_dt
+        if hasattr(dict_pl, "cell_composition_changed"):
+            dict_pl.cell_composition_changed = True
+        elif isinstance(dict_pl, dict):
+            dict_pl["cell_composition_changed"] = True
+        eng.run_hypothesis_engine(dict_pl)
         assert captured["pl"]["data_type"] == bulk_dt
         assert captured["pl"]["cell_composition_changed"] is True
     finally:
