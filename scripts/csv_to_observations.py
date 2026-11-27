@@ -159,7 +159,7 @@ def csv_row_to_weighted_observation(row: dict[str, str | None]) -> WeightedObser
 def load_weighted_observations_from_csv(csv_path: str | Path) -> list[WeightedObservation]:
     """агружает список WeightedObservation из CSV-файла в кодировке UTF-8."""
     path = Path(csv_path)
-    with path.open("r", encoding="utf-8", newline="") as handle:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         return [csv_row_to_weighted_observation(row) for row in reader]
 
