@@ -16,3 +16,4 @@ blood_snap.json
 
 .bioos_backups/
 pytest_last_run.log
+.coverage
