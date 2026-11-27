@@ -130,3 +130,53 @@ if __name__ == "__main__":
         print(f"Saved: {out_json} ({len(payload['observations'])} observations)")
     else:
         print(rendered)
+
+def csv_row_to_weighted_observation(row: dict[str, str | None]) -> WeightedObservation:
+    """реобразует строку CSV в модель WeightedObservation."""
+    required_fields = ("observation_id", "direction", "confidence", "source_type")
+    missing = [field for field in required_fields if row.get(field) is None]
+    if missing:
+        raise ValueError(f"Missing required CSV columns: {', '.join(missing)}")
+
+    raw_id = (row["observation_id"] or "").strip()
+    raw_direction = (row["direction"] or "").strip()
+    raw_confidence = (row["confidence"] or "").strip()
+    raw_source = (row["source_type"] or "").strip()
+
+    try:
+        confidence_val = float(raw_confidence)
+    except ValueError as exc:
+        raise ValueError(f"Invalid confidence value: {raw_confidence!r}") from exc
+
+    return WeightedObservation(
+        observation_id=raw_id,
+        direction=raw_direction,  # type: ignore[arg-type]
+        confidence=confidence_val,
+        source_type=raw_source,
+    )
+
+
+def load_weighted_observations_from_csv(csv_path: str | Path) -> list[WeightedObservation]:
+    """агружает список WeightedObservation из CSV-файла в кодировке UTF-8."""
+    path = Path(csv_path)
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return [csv_row_to_weighted_observation(row) for row in reader]
+
+
+def evaluate_csv_observations(
+    csv_path: str | Path,
+    policy: ScoringPolicy | None = None,
+) -> ScoringTrace:
+    """агружает наблюдения из CSV и вычисляет взвешенную оценку гипотезы."""
+    observations = load_weighted_observations_from_csv(csv_path)
+    return evaluate_weighted_hypothesis(observations=observations, policy=policy)
+import csv
+from pathlib import Path
+
+from hypothesis_engine_v0_1.scoring_rules import (
+    ScoringPolicy,
+    ScoringTrace,
+    WeightedObservation,
+    evaluate_weighted_hypothesis,
+)

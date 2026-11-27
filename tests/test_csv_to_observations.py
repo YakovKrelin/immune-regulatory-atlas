@@ -682,3 +682,57 @@ def test_helper_branches_nested_model_panel_and_row_lookup(monkeypatch):
     obj_row = SimpleNamespace(log2FC=1.75)
     assert getattr(obj_row, "log2FC", None) == 1.75
     assert getattr(obj_row, "missing_attr", None) is None
+
+
+def test_evaluate_csv_observations_with_policy(tmp_path: Path) -> None:
+    csv_file = tmp_path / "observations.csv"
+    csv_file.write_text(
+        "observation_id,direction,confidence,source_type\n"
+        "obs-1,support,0.8,assay\n"
+        "obs-2,contradict,0.4,literature\n",
+        encoding="utf-8",
+    )
+    policy = ScoringPolicy(
+        source_weights={"assay": 2.0, "literature": 1.0},
+        min_support_threshold=0.2,
+    )
+
+    trace = evaluate_csv_observations(csv_file, policy=policy)
+    assert trace.raw_support == pytest.approx(1.6)
+    assert trace.raw_contradict == pytest.approx(0.4)
+    assert trace.passed_threshold is True
+
+
+def test_evaluate_csv_observations_empty_table(tmp_path: Path) -> None:
+    csv_file = tmp_path / "empty.csv"
+    csv_file.write_text(
+        "observation_id,direction,confidence,source_type\n",
+        encoding="utf-8",
+    )
+
+    trace = evaluate_csv_observations(csv_file)
+    assert trace.net_score == 0.0
+    assert trace.triggered_rules == ["empty_observations"]
+
+
+def test_csv_row_errors_missing_column_and_bad_confidence() -> None:
+    with pytest.raises(ValueError, match="Missing required CSV columns"):
+        csv_row_to_weighted_observation(
+            {"observation_id": "obs-1", "direction": "support", "confidence": "0.5"}
+        )
+
+    with pytest.raises(ValueError, match="Invalid confidence value"):
+        csv_row_to_weighted_observation(
+            {
+                "observation_id": "obs-1",
+                "direction": "support",
+                "confidence": "not-a-number",
+                "source_type": "assay",
+            }
+        )
+
+from hypothesis_engine_v0_1.scoring_rules import ScoringPolicy
+from scripts.csv_to_observations import (
+    csv_row_to_weighted_observation,
+    evaluate_csv_observations,
+)
