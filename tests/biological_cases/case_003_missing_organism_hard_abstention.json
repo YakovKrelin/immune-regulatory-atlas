@@ -1,18 +1,25 @@
-{
-  "case_id": "case_003_missing_organism_hard_abstention",
-  "category": "abstention",
-  "input": {
-    "cell_type": "macrophage",
-    "target": "IL6",
-    "measurement_level": "mRNA",
-    "control_or_reference_condition": "untreated"
-  },
-  "expected": {
-    "mode": "hard_abstention",
-    "branch_statuses": {},
-    "conflicts": []
-  },
-  "forbidden_claims": [
-    "Inferred species-specific mechanism without organism"
-  ]
-}
+{
+  "case_id": "case_003_missing_organism_hard_abstention",
+  "category": "abstention",
+  "input": {
+    "cell_type": "macrophage",
+    "target": "IL6",
+    "measurement_level": "mRNA",
+    "control_or_reference_condition": "untreated"
+  },
+  "expected": {
+    "mode": "hard_abstention",
+    "passed_threshold": false,
+    "conflicts": [
+      "missing_organism"
+    ],
+    "discriminating_measurements": [
+      "Provide organism taxonomy before hypothesis evaluation"
+    ]
+  },
+  "forbidden_claims": [
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ]
+}

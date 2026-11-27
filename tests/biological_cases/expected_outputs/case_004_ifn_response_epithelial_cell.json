@@ -1,0 +1,16 @@
+{
+  "expected_mode": "weak_inference",
+  "expected_conflicts": [],
+  "expected_discriminating_measurements": [
+    "STAT1/IRF3 phosphorylation and nuclear translocation assay",
+    "IFNAR1 blockade / perturbation with matched time-series control"
+  ],
+  "forbidden_outputs": [
+    "ISG15 is elevated because of IFN",
+    "IFN causes epithelial inflammation",
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ],
+  "expected_passed_threshold": true
+}

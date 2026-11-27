@@ -1,0 +1,45 @@
+{
+  "case_id": "case_006_il1b_processing_macrophage",
+  "category": "weak_inference_il1b",
+  "input": {
+    "context": {
+      "organism": "Homo sapiens",
+      "cell_type": "macrophage",
+      "condition": "inflammasome_priming_and_signal",
+      "timepoint": "2h",
+      "measurement_level": "mRNA",
+      "assay": "bulk_rna_seq",
+      "has_control": true
+    },
+    "observations": [
+      {
+        "observation_id": "obs-il1b-mrna",
+        "direction": "support",
+        "confidence": 0.78,
+        "source_type": "transcriptomics"
+      },
+      {
+        "observation_id": "obs-nlrp3-mrna",
+        "direction": "support",
+        "confidence": 0.62,
+        "source_type": "transcriptomics"
+      }
+    ]
+  },
+  "expected": {
+    "mode": "weak_inference",
+    "passed_threshold": true,
+    "conflicts": [],
+    "discriminating_measurements": [
+      "Supernatant mature IL-1beta ELISA / immunoblot (p17 vs pro-IL-1beta p31)",
+      "Caspase-1 cleavage / ASC speck readout with inflammasome perturbation"
+    ]
+  },
+  "forbidden_claims": [
+    "Mature IL1B is secreted because of IL1B mRNA",
+    "IL1B mRNA proves inflammasome activation",
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ]
+}

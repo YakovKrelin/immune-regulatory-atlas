@@ -14,10 +14,17 @@
   },
   "expected": {
     "mode": "hard_abstention",
-    "branch_statuses": {},
-    "conflicts": ["21% O2"]
+    "passed_threshold": false,
+    "conflicts": [
+      "context_or_condition_conflict"
+    ],
+    "discriminating_measurements": [
+      "Verify dissolved/ambient oxygen fraction and matched normoxic/hypoxic controls"
+    ]
   },
   "forbidden_claims": [
-    "Hypoxia response confirmed at 21% O2"
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
   ]
-}
+}

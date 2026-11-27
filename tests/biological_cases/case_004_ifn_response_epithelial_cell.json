@@ -1,0 +1,45 @@
+{
+  "case_id": "case_004_ifn_response_epithelial_cell",
+  "category": "weak_inference_ifn",
+  "input": {
+    "context": {
+      "organism": "Homo sapiens",
+      "cell_type": "epithelial_cell",
+      "condition": "type_i_ifn_stimulation",
+      "timepoint": "6h",
+      "measurement_level": "mRNA",
+      "assay": "bulk_rna_seq",
+      "has_control": true
+    },
+    "observations": [
+      {
+        "observation_id": "obs-ifit1-mrna",
+        "direction": "support",
+        "confidence": 0.72,
+        "source_type": "transcriptomics"
+      },
+      {
+        "observation_id": "obs-isg15-mrna",
+        "direction": "support",
+        "confidence": 0.68,
+        "source_type": "transcriptomics"
+      }
+    ]
+  },
+  "expected": {
+    "mode": "weak_inference",
+    "passed_threshold": true,
+    "conflicts": [],
+    "discriminating_measurements": [
+      "STAT1/IRF3 phosphorylation and nuclear translocation assay",
+      "IFNAR1 blockade / perturbation with matched time-series control"
+    ]
+  },
+  "forbidden_claims": [
+    "ISG15 is elevated because of IFN",
+    "IFN causes epithelial inflammation",
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ]
+}

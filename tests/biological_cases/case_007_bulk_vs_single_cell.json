@@ -1,0 +1,48 @@
+{
+  "case_id": "case_007_bulk_vs_single_cell",
+  "category": "conflict_bulk_vs_single_cell",
+  "input": {
+    "context": {
+      "organism": "Homo sapiens",
+      "cell_type": "mixed_immune_and_stromal",
+      "condition": "hypoxia_or_inflammatory_stimulus",
+      "timepoint": "12h",
+      "measurement_level": "mRNA",
+      "assay": "bulk_rna_seq_vs_scRNA_seq",
+      "composition_resolved": false,
+      "has_control": true
+    },
+    "observations": [
+      {
+        "observation_id": "obs-bulk-signal",
+        "direction": "support",
+        "confidence": 0.7,
+        "source_type": "transcriptomics"
+      },
+      {
+        "observation_id": "obs-sc-subset-mismatch",
+        "direction": "contradict",
+        "confidence": 0.55,
+        "source_type": "transcriptomics"
+      }
+    ]
+  },
+  "expected": {
+    "mode": "weak_inference",
+    "passed_threshold": false,
+    "conflicts": [
+      "bulk_vs_single_cell_conflict"
+    ],
+    "discriminating_measurements": [
+      "Deconvolved single-cell / sorted subpopulation profiling with cell fraction accounting",
+      "Matched single-cell perturbation / intracellular readout"
+    ]
+  },
+  "forbidden_claims": [
+    "Bulk signal proves uniform per-cell activation",
+    "All cells activate the pathway because bulk signal increased",
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "expected_mode": "hard_abstention",
+  "expected_passed_threshold": false,
+  "expected_conflicts": [
+    "missing_organism"
+  ],
+  "expected_discriminating_measurements": [
+    "Secreted IL6 ELISA / intracellular cytokine staining",
+    "Perturbation or time-resolved sampling with matched control"
+  ],
+  "forbidden_outputs": [
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ]
+}

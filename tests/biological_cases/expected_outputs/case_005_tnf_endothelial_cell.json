@@ -1,0 +1,16 @@
+{
+  "expected_mode": "weak_inference",
+  "expected_conflicts": [],
+  "expected_discriminating_measurements": [
+    "Surface ICAM1/VCAM1 flow cytometry and NF-kB p65 nuclear assay",
+    "TNFR1 perturbation / neutralization with matched control"
+  ],
+  "forbidden_outputs": [
+    "ICAM1 is elevated because of TNF",
+    "TNF causes endothelial activation",
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ],
+  "expected_passed_threshold": true
+}

@@ -1,0 +1,16 @@
+{
+  "expected_mode": "weak_inference",
+  "expected_conflicts": [],
+  "expected_discriminating_measurements": [
+    "Supernatant mature IL-1beta ELISA / immunoblot (p17 vs pro-IL-1beta p31)",
+    "Caspase-1 cleavage / ASC speck readout with inflammasome perturbation"
+  ],
+  "forbidden_outputs": [
+    "Mature IL1B is secreted because of IL1B mRNA",
+    "IL1B mRNA proves inflammasome activation",
+    "IL6 is elevated because of HIF1A",
+    "HIF1A causes IL6",
+    "H2 is supported because HIF targets are increased"
+  ],
+  "expected_passed_threshold": true
+}
