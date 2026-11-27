@@ -494,3 +494,76 @@ def test_csv_unknown_measurement_level_falls_back_or_raises(tmp_path: Path):
         "not_measured",
         "other",
     }
+
+
+def test_infer_direction_high_fdr_and_gray_zone_return_ambiguous():
+    from hypothesis_engine_v0_1.schemas import SignalDirection, ThresholdSpec
+    csv_mod = _load_csv_module()
+    th = ThresholdSpec()
+
+    high_fdr_dir = csv_mod.infer_direction(2.5, th.max_fdr * 2, th)
+    assert high_fdr_dir == SignalDirection.AMBIGUOUS
+
+    mid_val = (th.max_abs_log2fc_unchanged + th.min_abs_log2fc_up) / 2.0
+    if mid_val > th.max_abs_log2fc_unchanged and mid_val < th.min_abs_log2fc_up:
+        gray_dir = csv_mod.infer_direction(mid_val, 0.001, th)
+        assert gray_dir == SignalDirection.AMBIGUOUS
+
+
+def test_csv_parse_level_uppercase_member_name(tmp_path: Path):
+    from hypothesis_engine_v0_1.schemas import MeasurementLevel
+    csv_mod = _load_csv_module()
+    member_name = next(iter(MeasurementLevel.__members__.keys()))
+    expected_level = MeasurementLevel[member_name]
+
+    csv_file = tmp_path / "uppercase_level.csv"
+    csv_file.write_text(
+        "observation_id,entity,assay,level,log2FC,fdr,timepoint\n"
+        f"obs_1,IL6,elisa,{member_name.upper()},2.0,0.001,12h\n",
+        encoding="utf-8",
+    )
+
+    rows = csv_mod.csv_to_observations(csv_file)
+    assert len(rows) == 1
+    assert rows[0]["level"] == expected_level.value
+
+
+def test_csv_cli_main_stdout_output_file_and_missing_args(tmp_path: Path, monkeypatch, capsys):
+    import json
+    import subprocess
+    import sys
+
+    script_path = Path("scripts/csv_to_observations.py")
+    csv_file = tmp_path / "cli_input.csv"
+    csv_file.write_text(
+        "observation_id,entity,assay,log2FC,fdr,timepoint\n"
+        "obs_1,IL6,rna_seq,2.1,0.001,6h\n",
+        encoding="utf-8",
+    )
+
+    proc_no_args = subprocess.run(
+        [sys.executable, str(script_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert proc_no_args.returncode != 0
+
+    monkeypatch.setattr(sys, "argv", [str(script_path)])
+    try:
+        exec(compile(script_path.read_text(encoding="utf-8"), str(script_path), "exec"), {"__name__": "__main__"})
+    except SystemExit as exc:
+        assert "Usage:" in str(exc)
+
+    monkeypatch.setattr(sys, "argv", [str(script_path), str(csv_file)])
+    exec(compile(script_path.read_text(encoding="utf-8"), str(script_path), "exec"), {"__name__": "__main__"})
+    out_stdout = capsys.readouterr().out
+    parsed_stdout = json.loads(out_stdout)
+    assert len(parsed_stdout["observations"]) == 1
+
+    out_file = tmp_path / "nested" / "dir" / "payload.json"
+    monkeypatch.setattr(sys, "argv", [str(script_path), str(csv_file), str(out_file)])
+    exec(compile(script_path.read_text(encoding="utf-8"), str(script_path), "exec"), {"__name__": "__main__"})
+    capsys.readouterr()
+    assert out_file.exists()
+    parsed_file = json.loads(out_file.read_text(encoding="utf-8"))
+    assert parsed_file["observations"][0]["entity"] == "IL6"
