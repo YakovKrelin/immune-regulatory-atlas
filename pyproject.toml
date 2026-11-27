@@ -27,3 +27,8 @@ include = ["hypothesis_engine_v0_1*"]
 
 [tool.coverage.run]
 source = ["hypothesis_engine_v0_1"]
+branch = true
+
+[tool.mutmut]
+paths_to_mutate = ["hypothesis_engine_v0_1/scoring_rules.py", "scripts/csv_to_observations.py"]
+runner = "pytest -q"

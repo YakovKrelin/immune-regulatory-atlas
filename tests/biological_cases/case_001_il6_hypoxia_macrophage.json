@@ -1,79 +1,50 @@
-﻿{
+{
   "case_id": "case_001_il6_hypoxia_macrophage",
-  "category": "positive_mechanism",
+  "category": "hypoxia_macrophage",
   "input": {
-    "organism": "Mus musculus",
+    "organism": "Homo sapiens",
     "cell_type": "macrophage",
     "target": "IL6",
     "measurement_level": "mRNA",
-    "control_or_reference_condition": "normoxia_control",
+    "control_or_reference_condition": "normoxia_baseline",
     "condition": {
       "oxygen": "Hypoxia",
       "oxygen_level": "1% O2"
     },
+    "policy": {
+      "source_weights": {
+        "assay": 1.0,
+        "literature": 1.0
+      },
+      "min_support_threshold": 0.5
+    },
     "observations": [
       {
-        "observation_id": "obs_1",
-        "entity": "VEGFA",
-        "assay": "rna_seq",
-        "direction": "up",
-        "timepoint": "12h"
+        "observation_id": "obs-hif-1",
+        "direction": "support",
+        "confidence": 0.7,
+        "source_type": "assay"
       },
       {
-        "observation_id": "obs_2",
-        "entity": "SLC2A1",
-        "assay": "rna_seq",
-        "direction": "up",
-        "timepoint": "12h"
-      },
-      {
-        "observation_id": "obs_3",
-        "entity": "P65_PHOSPHO",
-        "assay": "immunoblot",
-        "direction": "up",
-        "timepoint": "12h"
-      },
-      {
-        "observation_id": "obs_4",
-        "entity": "IKBA_DEGRADATION",
-        "assay": "immunoblot",
-        "direction": "up",
-        "timepoint": "12h"
-      },
-      {
-        "observation_id": "obs_5",
-        "entity": "NFKBIA",
-        "assay": "rna_seq",
-        "direction": "up",
-        "timepoint": "12h"
-      },
-      {
-        "observation_id": "obs_6",
-        "entity": "TNFAIP3",
-        "assay": "rna_seq",
-        "direction": "up",
-        "timepoint": "12h"
-      },
-      {
-        "observation_id": "obs_7",
-        "entity": "IL6",
-        "assay": "rna_seq",
-        "direction": "up",
-        "timepoint": "12h"
+        "observation_id": "obs-lit-1",
+        "direction": "contradict",
+        "confidence": 0.4,
+        "source_type": "literature"
       }
     ]
   },
   "expected": {
     "mode": "weak_inference",
-    "branch_statuses": {
-      "H1": {
-        "data_status": "compatible"
-      }
-    },
-    "conflicts": []
+    "branch_statuses": {},
+    "conflicts": [],
+    "raw_support": 0.7,
+    "raw_contradict": 0.4,
+    "passed_threshold": false
   },
   "forbidden_claims": [
     "IL6 is elevated because of HIF1A",
-    "H1 is supported as proven causation"
+    "causal_proof",
+    "proven_mechanism",
+    "diagnosis"
   ]
 }

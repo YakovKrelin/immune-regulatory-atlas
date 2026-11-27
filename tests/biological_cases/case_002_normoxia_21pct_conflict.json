@@ -1,4 +1,4 @@
-﻿{
+{
   "case_id": "case_002_normoxia_21pct_conflict",
   "category": "conflict",
   "input": {
@@ -20,4 +20,4 @@
   "forbidden_claims": [
     "Hypoxia response confirmed at 21% O2"
   ]
-}
+}

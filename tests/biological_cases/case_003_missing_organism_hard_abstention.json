@@ -1,18 +1,18 @@
-{
-  "case_id": "case_003_missing_organism_hard_abstention",
-  "category": "abstention",
-  "input": {
-    "cell_type": "macrophage",
-    "target": "IL6",
-    "measurement_level": "mRNA",
-    "control_or_reference_condition": "untreated"
-  },
-  "expected": {
-    "mode": "hard_abstention",
-    "branch_statuses": {},
-    "conflicts": []
-  },
-  "forbidden_claims": [
-    "Inferred species-specific mechanism without organism"
-  ]
-}
+{
+  "case_id": "case_003_missing_organism_hard_abstention",
+  "category": "abstention",
+  "input": {
+    "cell_type": "macrophage",
+    "target": "IL6",
+    "measurement_level": "mRNA",
+    "control_or_reference_condition": "untreated"
+  },
+  "expected": {
+    "mode": "hard_abstention",
+    "branch_statuses": {},
+    "conflicts": []
+  },
+  "forbidden_claims": [
+    "Inferred species-specific mechanism without organism"
+  ]
+}
