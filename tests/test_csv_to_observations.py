@@ -567,3 +567,85 @@ def test_csv_cli_main_stdout_output_file_and_missing_args(tmp_path: Path, monkey
     assert out_file.exists()
     parsed_file = json.loads(out_file.read_text(encoding="utf-8"))
     assert parsed_file["observations"][0]["entity"] == "IL6"
+
+
+
+def test_build_payload_without_input_cls_and_with_dict_payload(monkeypatch):
+    from hypothesis_engine_v0_1 import schemas
+
+    ctx = _make_context(schemas, control="ctrl_veh")
+    panel = _build_orthogonal_panel(schemas)
+
+    monkeypatch.setattr(schemas, "HypothesisEngineInput", None, raising=False)
+    dict_payload = _build_payload(
+        schemas,
+        query_id="q_dict_fallback",
+        scenario="scen_dict",
+        target_entity="IL6",
+        context=ctx,
+        observations=[],
+        orthogonal_state_panel=panel,
+    )
+    assert isinstance(dict_payload, dict)
+    assert dict_payload["orthogonal_state_panel"] is panel
+
+
+def test_csv_e2e_dict_payload_branches_and_helper_object_lookup(tmp_path: Path, monkeypatch):
+    from types import SimpleNamespace
+    from hypothesis_engine_v0_1 import engine as eng, schemas
+
+    csv_mod = _load_csv_module()
+    csv_file = tmp_path / "dict_branch.csv"
+    csv_file.write_text(
+        "observation_id,entity,assay,log2FC,fdr,timepoint\n"
+        "obs_1,VEGFA,rna_seq,2.2,0.001,12h\n"
+        "obs_2,IL6,elisa,1.9,0.002,12h\n",
+        encoding="utf-8",
+    )
+    observations = csv_mod.csv_to_observations(csv_file)
+    ctx = _make_context(schemas, control="normoxia_ctrl")
+    bulk_dt = getattr(getattr(schemas, "DataType", None), "BULK_RNA_SEQ", "bulk_rna_seq")
+
+    captured = {}
+
+    def _fake_run(pl):
+        captured["pl"] = pl
+        return SimpleNamespace(mode="normal", hypotheses={})
+
+    monkeypatch.setattr(eng, "run_hypothesis_engine", _fake_run)
+
+    real_build_payload = globals()["_build_payload"]
+
+    def _dict_build_payload(*args, **kwargs):
+        res = real_build_payload(*args, **kwargs)
+        if hasattr(res, "model_dump"):
+            dumped = res.model_dump()
+            dumped.pop("data_type", None)
+            dumped.pop("cell_composition_changed", None)
+            return dumped
+        return dict(res)
+
+    monkeypatch.setitem(globals(), "_build_payload", _dict_build_payload)
+    try:
+        pl = _build_payload(
+            schemas,
+            query_id="q_dict_run",
+            scenario="scen_dict_run",
+            target_entity="IL6",
+            context=ctx,
+            observations=observations,
+            orthogonal_state_panel=_build_orthogonal_panel(schemas),
+        )
+        if hasattr(pl, "data_type"):
+            pl.data_type = bulk_dt
+        elif isinstance(pl, dict):
+            pl["data_type"] = bulk_dt
+        if hasattr(pl, "cell_composition_changed"):
+            pl.cell_composition_changed = True
+        elif isinstance(pl, dict):
+            pl["cell_composition_changed"] = True
+        eng.run_hypothesis_engine(pl)
+        assert captured["pl"]["data_type"] == bulk_dt
+        assert captured["pl"]["cell_composition_changed"] is True
+    finally:
+        monkeypatch.setitem(globals(), "_build_payload", real_build_payload)
