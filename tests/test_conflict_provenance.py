@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from hypothesis_engine_v0_1.conflict_detector import (
     NegativeEvidenceStatus,
@@ -118,3 +118,36 @@ def test_negative_evidence_statuses_and_provenance_separation():
     assert by_id["PRIOR-1"].citable_as_evidence is False
     assert by_id["PRIOR-1"].requires_curator_review is True
     assert len(report.negative_evidence_items) == 2
+
+
+def test_detect_conflicts_flags_measurement_level_conflict():
+    from hypothesis_engine_v0_1.conflict_detector import detect_conflicts
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        MeasurementLevel,
+        Observation,
+        SignalDirection,
+        TargetSpec,
+    )
+
+    ctx = BiologicalContext(organism="Homo sapiens", cell_type="macrophage")
+    target = TargetSpec(entity="IL6")
+    obs = [
+        Observation(
+            observation_id="OBS-MRNA",
+            entity="IL6",
+            assay="RNA-seq",
+            level=MeasurementLevel.MRNA,
+            direction=SignalDirection.UP,
+        ),
+        Observation(
+            observation_id="OBS-PROT",
+            entity="IL6",
+            assay="ELISA",
+            level=MeasurementLevel.SECRETED_PROTEIN,
+            direction=SignalDirection.UP,
+        ),
+    ]
+
+    report = detect_conflicts(context=ctx, target=target, observations=obs)
+    assert any(c.conflict_type == "measurement_level_conflict" for c in report.conflicts)

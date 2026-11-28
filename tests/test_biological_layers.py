@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from hypothesis_engine_v0_1.biological_layers import (
     evaluate_mandatory_context,
@@ -121,3 +121,29 @@ def test_evaluate_mandatory_context_modes_and_abstention():
         data_type=DataType.SINGLE_CELL_RNA_SEQ,
     )
     assert res_cond.mode == InferenceMode.CONDITIONAL_INFERENCE
+
+
+def test_evaluate_mandatory_context_missing_mandatory_fields_and_unspecified_target_level():
+    from hypothesis_engine_v0_1.biological_layers import evaluate_mandatory_context
+    from hypothesis_engine_v0_1.schemas import (
+        BiologicalContext,
+        ConditionContext,
+        MeasurementLevel,
+        StudyDesignContext,
+        TargetSpec,
+    )
+
+    sparse_ctx = BiologicalContext(
+        organism="Homo sapiens",
+        cell_type="",
+        condition=ConditionContext(),
+        study_design=StudyDesignContext(control=""),
+    )
+    res = evaluate_mandatory_context(
+        sparse_ctx,
+        target=TargetSpec(entity="IL6", level=MeasurementLevel.NOT_SPECIFIED),
+    )
+    assert "cell_type" in res.missing_mandatory
+    assert "condition" in res.missing_mandatory
+    assert "study_design.control" in res.missing_mandatory
+    assert "target.level" in res.missing_mandatory
