@@ -96,8 +96,7 @@ def _normalize_counter_signs(
             continue
         normalized.add(cleaned)
         token = cleaned.split()[0]
-        if token:
-            normalized.add(token)
+        normalized.add(token)
     return normalized
 
 

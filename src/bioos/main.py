@@ -462,8 +462,7 @@ def _traverse_graph(
                 if tgt not in visited:
                     visited.add(tgt)
                     next_frontier.add(tgt)
-                    if tgt != start_clean and tgt not in discovered_nodes:
-                        discovered_nodes.append(tgt)
+                    discovered_nodes.append(tgt)
         frontier = next_frontier
         if not frontier:
             break

@@ -1332,9 +1332,7 @@ def rank_consensus_by_conflict_aware_confidence_v02(
     )
     by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        pid = str(row.get("path_id", ""))
-        if pid:
-            by_path[pid].append(row)
+        by_path[str(row.get("path_id", ""))].append(row)
 
     ranked_rows: list[dict[str, Any]] = []
     for pid, items in by_path.items():
@@ -1442,9 +1440,7 @@ def rank_consensus_by_confidence_v02(
     )
     by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        pid = str(row.get("path_id", ""))
-        if pid:
-            by_path[pid].append(row)
+        by_path[str(row.get("path_id", ""))].append(row)
 
     ranked_rows: list[dict[str, Any]] = []
     for pid, items in by_path.items():
@@ -1534,9 +1530,7 @@ def rank_consensus_with_conflict_penalty_v02(
     )
     by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        pid = str(row.get("path_id", ""))
-        if pid:
-            by_path[pid].append(row)
+        by_path[str(row.get("path_id", ""))].append(row)
 
     pen_weight = max(0.0, float(conflict_penalty_weight))
     ranked_rows: list[dict[str, Any]] = []
@@ -1632,9 +1626,7 @@ def rank_consensus_by_score_stability_v02(
     )
     by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        pid = str(row.get("path_id", ""))
-        if pid:
-            by_path[pid].append(row)
+        by_path[str(row.get("path_id", ""))].append(row)
 
     ranked_rows: list[dict[str, Any]] = []
     for pid, items in by_path.items():
@@ -2962,9 +2954,7 @@ def rank_paths_by_context_weighted_consensus_v02(
 
     by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        pid = str(row.get("path_id", ""))
-        if pid:
-            by_path[pid].append(row)
+        by_path[str(row.get("path_id", ""))].append(row)
 
     consensus_rows: list[dict[str, Any]] = []
     for path_id, items in by_path.items():
