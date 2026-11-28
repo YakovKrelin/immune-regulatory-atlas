@@ -102,21 +102,87 @@ def test_ollama_renderer_falls_back_safely_on_causal_violation_or_outage():
     assert res_offline.payload.claims[0].cited_ids == ["OBS-1"]
 
 
+def test_ollama_renderer_rejects_unknown_ids_and_mode_mismatch():
+    def bad_ids_and_mode_caller(**kwargs):
+        return json.dumps(
+            {
+                "query_id": "q-103",
+                "mode": "conditional_inference",
+                "has_perturbation_evidence": False,
+                "claims": [
+                    {
+                        "statement": "IL6 transcript is reported in observed sample.",
+                        "claim_kind": "observation_summary",
+                        "hypothesis_id": "H_UNAPPROVED",
+                        "cited_ids": ["OBS-UNKNOWN"],
+                    }
+                ],
+            }
+        )
+
+    res = render_with_ollama_guardrail(
+        query_id="q-103",
+        mode="weak_inference",
+        context_summary="human macrophage 1% O2",
+        allowed_source_ids={"OBS-1"},
+        allowed_hypothesis_ids={"H1"},
+        has_perturbation_evidence=False,
+        chat_caller=bad_ids_and_mode_caller,
+    )
+    codes = {i.code for i in res.validation_issues}
+    assert res.used_fallback is True
+    assert {"mode_mismatch", "missing_or_unknown_citation", "unauthorized_hypothesis"}.issubset(codes)
+
+
 def test_default_ollama_chat_caller_success_empty_and_network_error(monkeypatch):
     import io
     import urllib.error
     import pytest
     from hypothesis_engine_v0_1.ollama_renderer import build_deterministic_fallback, default_ollama_chat_caller
+
     class _R(io.BytesIO):
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=30.0: _R(json.dumps({"message": {"content": "{\"query_id\":\"q1\"}"}}).encode("utf-8")))
-    assert '"q1"' in default_ollama_chat_caller(base_url="http://localhost:11434/api/chat", model="llama3.2:1b", messages=[{"role": "user", "content": "hi"}], schema={"type": "object"})
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=30.0: _R(json.dumps({"message": {"content": "   "}}).encode("utf-8")))
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout=30.0: _R(json.dumps({"message": {"content": "{\"query_id\":\"q1\"}"}}).encode("utf-8")),
+    )
+    assert '"q1"' in default_ollama_chat_caller(
+        base_url="http://localhost:11434/api/chat",
+        model="llama3.2:1b",
+        messages=[{"role": "user", "content": "hi"}],
+        schema={"type": "object"},
+    )
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout=30.0: _R(json.dumps({"message": {"content": "   "}}).encode("utf-8")),
+    )
     with pytest.raises(RuntimeError, match="empty message content"):
-        default_ollama_chat_caller(base_url="http://localhost:11434/api/chat", model="llama3.2:1b", messages=[{"role": "user", "content": "hi"}], schema={"type": "object"})
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=30.0: (_ for _ in ()).throw(urllib.error.URLError("offline")))
+        default_ollama_chat_caller(
+            base_url="http://localhost:11434/api/chat",
+            model="llama3.2:1b",
+            messages=[{"role": "user", "content": "hi"}],
+            schema={"type": "object"},
+        )
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout=30.0: (_ for _ in ()).throw(urllib.error.URLError("offline")),
+    )
     with pytest.raises(RuntimeError, match="Ollama request failed"):
-        default_ollama_chat_caller(base_url="http://localhost:11434/api/chat", model="llama3.2:1b", messages=[{"role": "user", "content": "hi"}], schema={"type": "object"})
-    fb = build_deterministic_fallback(query_id="q-empty", mode="hard_abstention", allowed_source_ids=set(), allowed_hypothesis_ids={"H1"})
+        default_ollama_chat_caller(
+            base_url="http://localhost:11434/api/chat",
+            model="llama3.2:1b",
+            messages=[{"role": "user", "content": "hi"}],
+            schema={"type": "object"},
+        )
+    fb = build_deterministic_fallback(
+        query_id="q-empty",
+        mode="hard_abstention",
+        allowed_source_ids=set(),
+        allowed_hypothesis_ids={"H1"},
+    )
     assert fb.claims == [] and fb.mode == "hard_abstention"

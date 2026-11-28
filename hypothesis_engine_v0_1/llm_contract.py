@@ -117,7 +117,7 @@ def validate_llm_explanation(
                     severity="error",
                     message=(
                         f"Claim[{idx}] references hypothesis_id {claim.hypothesis_id!r} "
-                        f"not in allowed hypotheses {sorted(allowed_hypothesis_ids)}."
+                        f"outside allowed_hypothesis_ids={sorted(allowed_hypothesis_ids)}."
                     ),
                 )
             )

@@ -1,0 +1,45 @@
+{
+  "case_id": "case_008_conflicting_evidence",
+  "category": "conflict_detection",
+  "input": {
+    "context": {
+      "organism": "Homo sapiens",
+      "cell_type": "macrophage",
+      "condition": "ifng_normoxia_21pct",
+      "timepoint": "6h",
+      "measurement_level": "mRNA",
+      "assay": "bulk_vs_scrna",
+      "composition_resolved": false,
+      "has_control": true
+    },
+    "observations": [
+      {
+        "observation_id": "obs-stat1-support",
+        "direction": "support",
+        "confidence": 0.75,
+        "source_type": "transcriptomics"
+      },
+      {
+        "observation_id": "obs-stat1-contradict",
+        "direction": "contradict",
+        "confidence": 0.7,
+        "source_type": "transcriptomics"
+      }
+    ]
+  },
+  "expected": {
+    "mode": "weak_inference",
+    "passed_threshold": false,
+    "conflicts": [
+      "bulk_vs_single_cell_conflict",
+      "context_or_condition_conflict"
+    ],
+    "discriminating_measurements": [
+      "Matched control time-course with paired perturbation and resolved cell composition"
+    ]
+  },
+  "forbidden_claims": [
+    "IFNG definitively resolves STAT1 direction",
+    "STAT1 causes downstream polarization without conflict resolution"
+  ]
+}

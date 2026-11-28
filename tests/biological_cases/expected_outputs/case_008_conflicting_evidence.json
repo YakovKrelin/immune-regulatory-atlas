@@ -1,0 +1,15 @@
+{
+  "expected_mode": "weak_inference",
+  "expected_passed_threshold": false,
+  "expected_conflicts": [
+    "bulk_vs_single_cell_conflict",
+    "context_or_condition_conflict"
+  ],
+  "expected_discriminating_measurements": [
+    "Matched control time-course with paired perturbation and resolved cell composition"
+  ],
+  "forbidden_outputs": [
+    "IFNG definitively resolves STAT1 direction",
+    "STAT1 causes downstream polarization without conflict resolution"
+  ]
+}

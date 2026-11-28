@@ -1,0 +1,14 @@
+{
+  "expected_mode": "hard_abstention",
+  "expected_passed_threshold": false,
+  "expected_conflicts": [
+    "missing_organism"
+  ],
+  "expected_discriminating_measurements": [
+    "Verified organism metadata and controlled replicate experiment"
+  ],
+  "forbidden_outputs": [
+    "IL10 suppresses Tregs based on uncontrolled low-confidence data",
+    "Abstention indicates confirmed absence of biological effect"
+  ]
+}

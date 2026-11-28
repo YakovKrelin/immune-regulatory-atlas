@@ -1,0 +1,37 @@
+{
+  "case_id": "case_009_retracted_abstention",
+  "category": "hard_abstention_missing_context",
+  "input": {
+    "context": {
+      "organism": "",
+      "cell_type": "treg",
+      "condition": "il10_exposure",
+      "timepoint": "4h",
+      "measurement_level": "protein",
+      "assay": "elisa",
+      "has_control": false
+    },
+    "observations": [
+      {
+        "observation_id": "obs-il10-neutral",
+        "direction": "neutral",
+        "confidence": 0.2,
+        "source_type": "proteomics"
+      }
+    ]
+  },
+  "expected": {
+    "mode": "hard_abstention",
+    "passed_threshold": false,
+    "conflicts": [
+      "missing_organism"
+    ],
+    "discriminating_measurements": [
+      "Verified organism metadata and controlled replicate experiment"
+    ]
+  },
+  "forbidden_claims": [
+    "IL10 suppresses Tregs based on uncontrolled low-confidence data",
+    "Abstention indicates confirmed absence of biological effect"
+  ]
+}
