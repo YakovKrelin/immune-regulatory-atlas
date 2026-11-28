@@ -150,4 +150,4 @@ def test_detect_conflicts_flags_measurement_level_conflict():
     ]
 
     report = detect_conflicts(context=ctx, target=target, observations=obs)
-    assert any(c.conflict_type == "measurement_level_conflict" for c in report.conflicts)
+    assert any(c.conflict_type == "measurement_level_conflict" for c in report)

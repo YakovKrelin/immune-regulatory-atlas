@@ -143,7 +143,7 @@ def test_evaluate_mandatory_context_missing_mandatory_fields_and_unspecified_tar
         sparse_ctx,
         target=TargetSpec(entity="IL6", level=MeasurementLevel.NOT_SPECIFIED),
     )
-    assert "cell_type" in res.missing_mandatory
-    assert "condition" in res.missing_mandatory
-    assert "study_design.control" in res.missing_mandatory
-    assert "target.level" in res.missing_mandatory
+    assert "cell_type" in res.missing_mandatory_fields
+    assert "condition" in res.missing_mandatory_fields
+    assert "study_design.control" in res.missing_mandatory_fields
+    assert "target.level" in res.missing_mandatory_fields
